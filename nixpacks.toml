@@ -1,0 +1,3 @@
+# Local SQLite uses optional better-sqlite3; Railway only needs Neon (Postgres).
+[variables]
+NPM_CONFIG_OPTIONAL = "false"
