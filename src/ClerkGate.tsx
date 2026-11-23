@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { SignIn, UserButton, useAuth } from "@clerk/react";
+import { useAuth } from "@clerk/react";
+import { AuthScreen } from "./AuthScreen.tsx";
 import { setAuthTokenGetter } from "./lib/api.ts";
 
 export function ClerkGate({ children }: { children: ReactNode }) {
@@ -24,39 +25,17 @@ export function ClerkGate({ children }: { children: ReactNode }) {
 
   if (!isLoaded || !ready) {
     return (
-      <div className="grid min-h-screen place-items-center text-stone-500">
-        Loading…
+      <div className="grid min-h-screen place-items-center text-[var(--muted)]">
+        <p className="jm-fade-up text-sm font-medium tracking-wide">
+          Loading Job Margin…
+        </p>
       </div>
     );
   }
 
   if (!isSignedIn) {
-    return (
-      <div className="grid min-h-screen place-items-center px-4 py-10">
-        <div className="flex w-full max-w-md flex-col items-center gap-6">
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-[0.2em] text-stone-500">
-              job margin
-            </p>
-            <h1 className="font-serif text-3xl text-stone-900">
-              Estimate vs actual
-            </h1>
-            <p className="mt-2 text-sm text-stone-600">
-              Sign in to manage jobs, labor, and margin.
-            </p>
-          </div>
-          <SignIn routing="hash" />
-        </div>
-      </div>
-    );
+    return <AuthScreen />;
   }
 
-  return (
-    <>
-      <div className="fixed right-4 top-4 z-50">
-        <UserButton />
-      </div>
-      {children}
-    </>
-  );
+  return children;
 }

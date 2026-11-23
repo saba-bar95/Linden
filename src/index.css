@@ -2,16 +2,31 @@
 
 :root {
   color-scheme: light;
-  --ink: #1c1917;
-  --muted: #57534e;
-  --line: #e7e5e4;
-  --paper: #fafaf9;
-  --accent: #9a3412;
-  --ok: #166534;
-  --bad: #991b1b;
-  font-family: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+  --ink: #101820;
+  --ink-soft: #2a3542;
+  --muted: #5c6b7a;
+  --line: #d5dde5;
+  --line-strong: #b8c4d0;
+  --paper: #eef2f6;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #f7f9fb;
+  --accent: #0f766e;
+  --accent-ink: #0a5c56;
+  --accent-soft: #ccfbf1;
+  --warn: #b45309;
+  --warn-soft: #ffedd5;
+  --ok: #047857;
+  --ok-soft: #d1fae5;
+  --bad: #be123c;
+  --bad-soft: #ffe4e6;
+  --shadow: 0 18px 40px -28px rgba(16, 24, 32, 0.45);
+  --radius: 14px;
+  --font-display: "Syne", "Avenir Next", sans-serif;
+  --font-body: "Manrope", "Avenir Next", sans-serif;
+  font-family: var(--font-body);
   background: var(--paper);
   color: var(--ink);
+  line-height: 1.45;
 }
 
 * {
@@ -22,13 +37,28 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at top left, #f5e6d3 0%, transparent 45%),
-    radial-gradient(ellipse at bottom right, #e8efe6 0%, transparent 40%),
-    var(--paper);
+    radial-gradient(ellipse 70% 50% at 0% -10%, rgba(15, 118, 110, 0.16), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 100% 0%, rgba(14, 165, 233, 0.1), transparent 50%),
+    linear-gradient(180deg, #f4f7fa 0%, var(--paper) 40%, #e8eef4 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(16, 24, 32, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 24, 32, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 85%);
 }
 
 #root {
   min-height: 100vh;
+  position: relative;
 }
 
 a {
@@ -41,4 +71,156 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.jm-surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+
+.jm-field {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.jm-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
+}
+
+.jm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 0.65rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.jm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.jm-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.jm-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+.jm-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.jm-btn-primary:not(:disabled):hover {
+  background: var(--accent-ink);
+}
+
+.jm-btn-secondary {
+  background: #fff;
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.jm-btn-secondary:not(:disabled):hover {
+  border-color: var(--ink-soft);
+}
+
+.jm-btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+  padding-inline: 0.55rem;
+}
+
+.jm-btn-ghost:not(:disabled):hover {
+  color: var(--ink);
+  background: rgba(16, 24, 32, 0.05);
+}
+
+.jm-btn-danger {
+  background: transparent;
+  color: var(--bad);
+  border-color: transparent;
+}
+
+.jm-btn-danger:not(:disabled):hover {
+  background: var(--bad-soft);
+}
+
+.jm-fade-up {
+  animation: jm-fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.jm-fade-up-delay {
+  animation: jm-fade-up 520ms 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.jm-row {
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.jm-row:hover {
+  transform: translateX(3px);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+@keyframes jm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes jm-pulse-bar {
+  from {
+    transform: scaleX(0.96);
+    opacity: 0.75;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.jm-meter > span {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  animation: jm-pulse-bar 700ms ease both;
 }
