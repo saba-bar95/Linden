@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useSignIn, useSignUp } from "@clerk/react";
 import { Button, Field } from "./components/ui.tsx";
+import { validateForm } from "./lib/form.ts";
 
 type Mode = "sign-in" | "sign-up" | "verify";
 
@@ -201,7 +202,17 @@ export function AuthScreen() {
           )}
 
           {mode === "verify" ? (
-            <form className="space-y-3" onSubmit={onVerify}>
+            <form
+              noValidate
+              className="space-y-3"
+              onSubmit={(e) => {
+                if (!validateForm(e.currentTarget)) {
+                  e.preventDefault();
+                  return;
+                }
+                void onVerify(e);
+              }}
+            >
               <p className="text-sm text-[var(--muted)]">
                 Enter the code we sent to <strong>{email}</strong>.
               </p>
@@ -210,6 +221,8 @@ export function AuthScreen() {
                   Verification code
                 </span>
                 <Field
+                  name="code"
+                  data-label="Verification code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   inputMode="numeric"
@@ -218,7 +231,10 @@ export function AuthScreen() {
                 />
               </label>
               {(localError || fieldError(signUpErrors, "code")) && (
-                <p className="text-sm text-[var(--bad)]">
+                <p
+                  role="alert"
+                  className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
+                >
                   {localError ?? fieldError(signUpErrors, "code")}
                 </p>
               )}
@@ -228,14 +244,24 @@ export function AuthScreen() {
             </form>
           ) : (
             <form
+              noValidate
               className="space-y-3"
-              onSubmit={mode === "sign-in" ? onSignIn : onSignUp}
+              onSubmit={(e) => {
+                if (!validateForm(e.currentTarget)) {
+                  e.preventDefault();
+                  return;
+                }
+                if (mode === "sign-in") void onSignIn(e);
+                else void onSignUp(e);
+              }}
             >
               <label className="block space-y-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                   Email
                 </span>
                 <Field
+                  name="email"
+                  data-label="Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -248,6 +274,8 @@ export function AuthScreen() {
                   Password
                 </span>
                 <Field
+                  name="password"
+                  data-label="Password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -271,7 +299,10 @@ export function AuthScreen() {
                   mode === "sign-in" ? signInErrors : signUpErrors,
                   "email_address",
                 )) && (
-                <p className="text-sm text-[var(--bad)]">
+                <p
+                  role="alert"
+                  className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
+                >
                   {localError ??
                     fieldError(
                       mode === "sign-in" ? signInErrors : signUpErrors,

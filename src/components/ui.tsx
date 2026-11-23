@@ -1,19 +1,61 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
-export function Field(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`jm-field ${props.className ?? ""}`} />;
-}
-
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`jm-field ${props.className ?? ""}`} />;
-}
-
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function FieldWrap({
+  name,
+  className = "",
+  children,
+}: {
+  name?: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <textarea
-      {...props}
-      className={`jm-field min-h-24 resize-y ${props.className ?? ""}`}
-    />
+    <div className={`jm-field-wrap ${className}`}>
+      {children}
+      <p className="jm-field-error" data-error-for={name || undefined} role="alert" />
+    </div>
+  );
+}
+
+export function Field({
+  className = "",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <FieldWrap name={props.name} className={className}>
+      <input {...props} className="jm-field" />
+    </FieldWrap>
+  );
+}
+
+export function Select({
+  className = "",
+  children,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <FieldWrap name={props.name} className={className}>
+      <select {...props} className="jm-field">
+        {children}
+      </select>
+    </FieldWrap>
+  );
+}
+
+export function TextArea({
+  className = "",
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <FieldWrap name={props.name} className={className}>
+      <textarea {...props} className="jm-field min-h-24 resize-y" />
+    </FieldWrap>
   );
 }
 
@@ -135,8 +177,17 @@ export function EmptyState({
 
 export function ErrorBanner({ message }: { message: string }) {
   return (
-    <p className="mb-4 rounded-xl border border-[var(--bad)]/20 bg-[var(--bad-soft)] px-4 py-3 text-sm text-[var(--bad)]">
-      {message}
-    </p>
+    <div
+      role="alert"
+      className="jm-fade-up mb-4 flex items-start gap-3 rounded-xl border border-[var(--bad)]/25 bg-[var(--bad-soft)] px-4 py-3 text-sm text-[var(--bad)]"
+    >
+      <span
+        className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--bad)] text-[10px] font-bold text-white"
+        aria-hidden
+      >
+        !
+      </span>
+      <p className="font-medium leading-snug">{message}</p>
+    </div>
   );
 }

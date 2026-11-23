@@ -20,6 +20,7 @@ import {
   TextArea,
 } from "./components/ui.tsx";
 import { SsoCallback } from "./SsoCallback.tsx";
+import { validateForm } from "./lib/form.ts";
 
 const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
@@ -36,7 +37,7 @@ function Shell({
 }) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      <header className="jm-fade-up mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] pb-5">
+      <header className="jm-fade-up relative z-30 mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] pb-5">
         <div>
           <Link to="/" className="group inline-block">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
@@ -141,21 +142,32 @@ function JobsPage() {
 
       <Panel title="New job" className="mb-6">
         <form
-          onSubmit={createJob}
+          noValidate
+          onSubmit={(e) => {
+            if (!validateForm(e.currentTarget)) {
+              e.preventDefault();
+              return;
+            }
+            void createJob(e);
+          }}
           className="grid gap-3 md:grid-cols-[1.4fr_1fr_auto]"
         >
           <Field
+            name="title"
+            data-label="Job title"
             placeholder="Job title (e.g. Stair rail — Saburtalo)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
           />
           <Field
+            name="clientName"
+            data-label="Client"
             placeholder="Client"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
           />
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy} className="self-start">
             {busy ? "Creating…" : "Create job"}
           </Button>
         </form>
@@ -559,9 +571,11 @@ function JobDetailPage() {
 
         <Panel title="Invoiced">
           <form
-            className="flex flex-wrap gap-2"
+            noValidate
+            className="flex flex-wrap items-start gap-2"
             onSubmit={(e) => {
               e.preventDefault();
+              if (!validateForm(e.currentTarget)) return;
               const fd = new FormData(e.currentTarget);
               void api
                 .patchJob(job.id, {
@@ -572,9 +586,11 @@ function JobDetailPage() {
           >
             <Field
               name="invoiced"
+              data-label="Invoiced amount"
               type="number"
               step="0.01"
               min="0"
+              required
               defaultValue={job.invoicedAmount}
               className="max-w-56"
             />
@@ -597,20 +613,23 @@ function EstimateForm({
 }) {
   return (
     <form
+      noValidate
       className="grid gap-2 md:grid-cols-6"
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        if (!validateForm(e.currentTarget)) return;
+        const form = e.currentTarget;
+        const fd = new FormData(form);
         void onSubmit({
           category: fd.get("category"),
           description: fd.get("description"),
           quantity: Number(fd.get("quantity")),
           unitCost: Number(fd.get("unitCost")),
           unitPrice: Number(fd.get("unitPrice")),
-        }).then(() => e.currentTarget.reset());
+        }).then(() => form.reset());
       }}
     >
-      <Select name="category" defaultValue="labor">
+      <Select name="category" data-label="Category" defaultValue="labor">
         <option value="labor">labor</option>
         <option value="materials">materials</option>
         <option value="subcontract">subcontract</option>
@@ -618,19 +637,23 @@ function EstimateForm({
       </Select>
       <Field
         name="description"
+        data-label="Description"
         required
         placeholder="Description"
         className="md:col-span-2"
       />
       <Field
         name="quantity"
+        data-label="Quantity"
         type="number"
         step="0.01"
         min="0.01"
+        required
         defaultValue={1}
       />
       <Field
         name="unitCost"
+        data-label="Unit cost"
         type="number"
         step="0.01"
         min="0"
@@ -639,6 +662,7 @@ function EstimateForm({
       />
       <Field
         name="unitPrice"
+        data-label="Unit price"
         type="number"
         step="0.01"
         min="0"
@@ -675,19 +699,22 @@ function TimeForm({
   }
   return (
     <form
+      noValidate
       className="grid gap-2 md:grid-cols-5"
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        if (!validateForm(e.currentTarget)) return;
+        const form = e.currentTarget;
+        const fd = new FormData(form);
         void onSubmit({
           workerId: fd.get("workerId"),
           hours: Number(fd.get("hours")),
           workDate: fd.get("workDate") || undefined,
           note: fd.get("note") || undefined,
-        }).then(() => e.currentTarget.reset());
+        }).then(() => form.reset());
       }}
     >
-      <Select name="workerId" required>
+      <Select name="workerId" data-label="Worker" required>
         {workers.map((w) => (
           <option key={w.id} value={w.id}>
             {w.name} ({money(w.costRate)}/h cost)
@@ -696,15 +723,16 @@ function TimeForm({
       </Select>
       <Field
         name="hours"
+        data-label="Hours"
         type="number"
         step="0.25"
         min="0.25"
         placeholder="Hours"
         required
       />
-      <Field name="workDate" type="date" />
-      <Field name="note" placeholder="Note (optional)" />
-      <Button type="submit" variant="secondary">
+      <Field name="workDate" data-label="Work date" type="date" />
+      <Field name="note" data-label="Note" placeholder="Note (optional)" />
+      <Button type="submit" variant="secondary" className="self-start">
         Log time
       </Button>
     </form>
@@ -718,38 +746,47 @@ function CostForm({
 }) {
   return (
     <form
+      noValidate
       className="grid gap-2 md:grid-cols-5"
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        if (!validateForm(e.currentTarget)) return;
+        const form = e.currentTarget;
+        const fd = new FormData(form);
         void onSubmit({
           category: fd.get("category"),
           description: fd.get("description"),
           amount: Number(fd.get("amount")),
           status: fd.get("status"),
-        }).then(() => e.currentTarget.reset());
+        }).then(() => form.reset());
       }}
     >
-      <Select name="category" defaultValue="materials">
+      <Select name="category" data-label="Category" defaultValue="materials">
         <option value="materials">materials</option>
         <option value="subcontract">subcontract</option>
         <option value="other">other</option>
         <option value="labor">labor</option>
       </Select>
-      <Field name="description" required placeholder="Description" />
+      <Field
+        name="description"
+        data-label="Description"
+        required
+        placeholder="Description"
+      />
       <Field
         name="amount"
+        data-label="Amount"
         type="number"
         step="0.01"
         min="0.01"
         required
         placeholder="Amount"
       />
-      <Select name="status" defaultValue="actual">
+      <Select name="status" data-label="Status" defaultValue="actual">
         <option value="committed">committed</option>
         <option value="actual">actual</option>
       </Select>
-      <Button type="submit" variant="secondary">
+      <Button type="submit" variant="secondary" className="self-start">
         Add cost
       </Button>
     </form>
@@ -763,25 +800,30 @@ function ChangeOrderForm({
 }) {
   return (
     <form
+      noValidate
       className="grid gap-2 md:grid-cols-4"
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        if (!validateForm(e.currentTarget)) return;
+        const form = e.currentTarget;
+        const fd = new FormData(form);
         void onSubmit({
           description: fd.get("description"),
           costDelta: Number(fd.get("costDelta")),
           priceDelta: Number(fd.get("priceDelta")),
-        }).then(() => e.currentTarget.reset());
+        }).then(() => form.reset());
       }}
     >
       <Field
         name="description"
+        data-label="Description"
         required
         placeholder="Change description"
         className="md:col-span-2"
       />
       <Field
         name="costDelta"
+        data-label="Cost change"
         type="number"
         step="0.01"
         required
@@ -789,6 +831,7 @@ function ChangeOrderForm({
       />
       <Field
         name="priceDelta"
+        data-label="Price change"
         type="number"
         step="0.01"
         required
@@ -837,10 +880,13 @@ function WorkersPage() {
       {error && <ErrorBanner message={error} />}
       <Panel title="Add worker" className="mb-6">
         <form
+          noValidate
           className="grid gap-2 md:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            if (!validateForm(e.currentTarget)) return;
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             setBusy(true);
             void api
               .createWorker({
@@ -849,14 +895,15 @@ function WorkersPage() {
                 billRate: Number(fd.get("billRate")),
               })
               .then(() => refresh())
-              .then(() => e.currentTarget.reset())
+              .then(() => form.reset())
               .catch((err: Error) => setError(err.message))
               .finally(() => setBusy(false));
           }}
         >
-          <Field name="name" required placeholder="Name" />
+          <Field name="name" data-label="Name" required placeholder="Name" />
           <Field
             name="costRate"
+            data-label="Loaded cost / hour"
             type="number"
             step="0.01"
             min="0"
@@ -865,13 +912,14 @@ function WorkersPage() {
           />
           <Field
             name="billRate"
+            data-label="Bill rate / hour"
             type="number"
             step="0.01"
             min="0"
             required
             placeholder="Bill rate / hour"
           />
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy} className="self-start">
             {busy ? "Adding…" : "Add worker"}
           </Button>
         </form>
