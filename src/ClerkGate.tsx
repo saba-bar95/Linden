@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { SignIn, UserButton, useAuth } from "@clerk/clerk-react";
+import { SignIn, UserButton, useAuth } from "@clerk/react";
 import { setAuthTokenGetter } from "./lib/api.ts";
 
 export function ClerkGate({ children }: { children: ReactNode }) {
@@ -9,7 +9,13 @@ export function ClerkGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
     if (isSignedIn) {
-      setAuthTokenGetter(() => getToken());
+      setAuthTokenGetter(async () => {
+        try {
+          return await getToken();
+        } catch {
+          return null;
+        }
+      });
     } else {
       setAuthTokenGetter(null);
     }
@@ -48,7 +54,7 @@ export function ClerkGate({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="fixed right-4 top-4 z-50">
-        <UserButton afterSignOutUrl="/" />
+        <UserButton />
       </div>
       {children}
     </>

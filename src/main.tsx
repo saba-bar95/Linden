@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { ClerkProvider } from "@clerk/clerk-react";
+import { ClerkProvider } from "@clerk/react";
 import App from "./App.tsx";
 import { ClerkGate } from "./ClerkGate.tsx";
 import { setAuthToken } from "./lib/api.ts";
@@ -15,7 +15,7 @@ const app = (
   <StrictMode>
     <BrowserRouter>
       {pk ? (
-        <ClerkProvider publishableKey={pk}>
+        <ClerkProvider publishableKey={pk} afterSignOutUrl="/">
           <ClerkGate>
             <App />
           </ClerkGate>
