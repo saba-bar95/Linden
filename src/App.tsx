@@ -36,32 +36,29 @@ function Shell({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      <header className="jm-fade-up relative z-30 mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] pb-5">
-        <div>
-          <Link to="/" className="group inline-block">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
+    <div className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-8">
+      <header className="jm-fade-up relative z-30 mb-6 border-b border-[var(--line)] pb-4 sm:mb-8 sm:pb-5">
+        <div className="flex items-start justify-between gap-3">
+          <Link to="/" className="min-w-0 flex-1">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-[var(--accent)] sm:text-xs">
               Job Margin
             </p>
-            <h1 className="font-display mt-1 text-3xl font-bold tracking-tight text-[var(--ink)] sm:text-4xl">
+            <h1 className="font-display jm-break mt-1 text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl md:text-4xl">
               {title ?? "Estimate vs actual"}
             </h1>
           </Link>
-          {eyebrow ? (
-            <p className="mt-1 text-sm text-[var(--muted)]">{eyebrow}</p>
-          ) : (
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Track budget, labor, and change orders in one place.
-            </p>
-          )}
+          {hasClerk ? <AccountMenu /> : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <nav className="flex gap-1 rounded-xl bg-[#e8eef4] p-1">
+        <p className="jm-break mt-1 text-sm text-[var(--muted)]">
+          {eyebrow ?? "Track budget, labor, and change orders in one place."}
+        </p>
+        <div className="jm-toolbar mt-4">
+          <nav className="flex min-w-0 flex-1 gap-1 rounded-xl bg-[#e8eef4] p-1 sm:flex-none">
             <NavLink
               to="/"
               end
               className={({ isActive }) =>
-                `rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
                   isActive
                     ? "bg-white text-[var(--ink)] shadow-sm"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -73,7 +70,7 @@ function Shell({
             <NavLink
               to="/workers"
               className={({ isActive }) =>
-                `rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
                   isActive
                     ? "bg-white text-[var(--ink)] shadow-sm"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -83,8 +80,11 @@ function Shell({
               Workers
             </NavLink>
           </nav>
-          {actions}
-          {hasClerk ? <AccountMenu /> : null}
+          {actions ? (
+            <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
+              {actions}
+            </div>
+          ) : null}
         </div>
       </header>
       <div className="jm-fade-up-delay">{children}</div>
@@ -130,6 +130,7 @@ function JobsPage() {
         <Button
           type="button"
           variant="secondary"
+          className="min-h-10 flex-1 sm:flex-none"
           onClick={() =>
             void refresh().catch((e: Error) => setError(e.message))
           }
@@ -150,7 +151,7 @@ function JobsPage() {
             }
             void createJob(e);
           }}
-          className="grid gap-3 md:grid-cols-[1.4fr_1fr_auto]"
+          className="grid gap-3 sm:grid-cols-2 md:grid-cols-[1.4fr_1fr_auto]"
         >
           <Field
             name="title"
@@ -159,6 +160,7 @@ function JobsPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
+            className="sm:col-span-2 md:col-span-1"
           />
           <Field
             name="clientName"
@@ -167,7 +169,7 @@ function JobsPage() {
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
           />
-          <Button type="submit" disabled={busy} className="self-start">
+          <Button type="submit" disabled={busy} className="w-full sm:w-auto">
             {busy ? "Creating…" : "Create job"}
           </Button>
         </form>
@@ -184,22 +186,22 @@ function JobsPage() {
             <Link
               key={job.id}
               to={`/jobs/${job.id}`}
-              className="jm-row jm-surface block p-4"
+              className="jm-row jm-surface block p-3 sm:p-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <p className="font-display text-lg font-semibold text-[var(--ink)]">
+                    <p className="font-display jm-break text-base font-semibold text-[var(--ink)] sm:text-lg">
                       {job.title}
                     </p>
                     <StatusBadge status={job.status} />
                   </div>
-                  <p className="text-sm text-[var(--muted)]">
+                  <p className="jm-break text-sm text-[var(--muted)]">
                     {job.clientName || "No client"}
                   </p>
                 </div>
                 {job.margin && (
-                  <div className="min-w-44 text-right text-sm">
+                  <div className="shrink-0 text-left text-sm sm:min-w-40 sm:text-right">
                     <p
                       className={`font-display text-xl font-bold ${
                         job.margin.overBudget
@@ -290,6 +292,7 @@ function JobDetailPage() {
           <Button
             type="button"
             variant="secondary"
+            className="min-h-10 flex-1 sm:flex-none"
             onClick={() =>
               void refresh().catch((e: Error) => setError(e.message))
             }
@@ -299,6 +302,7 @@ function JobDetailPage() {
           <Button
             type="button"
             variant="secondary"
+            className="min-h-10 flex-1 sm:flex-none"
             onClick={() => setEditingMeta((v) => !v)}
           >
             {editingMeta ? "Cancel edit" : "Edit details"}
@@ -319,14 +323,14 @@ function JobDetailPage() {
 
       <div className="mb-6 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Job status">
-          <div className="mb-4 flex flex-wrap gap-2">
+          <div className="jm-status-grid mb-4">
             {(["draft", "active", "completed", "cancelled"] as const).map(
               (status) => (
                 <Button
                   key={status}
                   type="button"
                   variant={job.status === status ? "primary" : "secondary"}
-                  className="!capitalize"
+                  className="!capitalize !px-3 !py-2"
                   onClick={() =>
                     void api
                       .patchJob(job.id, { status })
@@ -361,7 +365,7 @@ function JobDetailPage() {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-[var(--muted)]">
+            <p className="jm-break text-sm text-[var(--muted)]">
               {job.notes?.trim()
                 ? job.notes
                 : "No notes yet. Use Edit details to add context for the crew."}
@@ -371,13 +375,13 @@ function JobDetailPage() {
 
         <Panel title="Current margin">
           <p
-            className={`font-display text-3xl font-bold ${
+            className={`font-display text-2xl font-bold sm:text-3xl ${
               margin.overBudget ? "text-[var(--bad)]" : "text-[var(--ok)]"
             }`}
           >
             {money(margin.margin)}
             {margin.marginPct != null ? (
-              <span className="ml-2 text-lg font-semibold opacity-80">
+              <span className="ml-2 text-base font-semibold opacity-80 sm:text-lg">
                 {margin.marginPct}%
               </span>
             ) : null}
@@ -431,9 +435,9 @@ function JobDetailPage() {
             {lines.map((line) => (
               <li
                 key={line.id}
-                className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] pb-2 text-sm"
+                className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span>
+                <span className="jm-break min-w-0">
                   <span className="font-semibold capitalize text-[var(--accent-ink)]">
                     {line.category}
                   </span>{" "}
@@ -443,6 +447,7 @@ function JobDetailPage() {
                 <Button
                   type="button"
                   variant="danger"
+                  className="self-start sm:self-auto"
                   onClick={() =>
                     void api.deleteEstimateLine(job.id, line.id).then(setBundle)
                   }
@@ -469,9 +474,9 @@ function JobDetailPage() {
             {timeEntries.map((t) => (
               <li
                 key={t.id}
-                className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] pb-2 text-sm"
+                className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span>
+                <span className="jm-break min-w-0">
                   {t.workDate} · {t.hours}h × {money(t.costRate)} ={" "}
                   <strong>{money(t.hours * t.costRate)}</strong>
                   {t.note ? ` · ${t.note}` : ""}
@@ -479,6 +484,7 @@ function JobDetailPage() {
                 <Button
                   type="button"
                   variant="danger"
+                  className="self-start sm:self-auto"
                   onClick={() =>
                     void api.deleteTime(job.id, t.id).then(setBundle)
                   }
@@ -499,15 +505,15 @@ function JobDetailPage() {
             {costEntries.map((e) => (
               <li
                 key={e.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] pb-2 text-sm"
+                className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span>
+                <span className="jm-break min-w-0">
                   {e.entryDate} ·{" "}
                   <span className="capitalize">{e.category}</span> ·{" "}
                   {e.description} · <strong>{money(e.amount)}</strong> ·{" "}
                   <em>{e.status}</em>
                 </span>
-                <span className="flex gap-1">
+                <span className="flex flex-wrap gap-1">
                   {e.status === "committed" && (
                     <Button
                       type="button"
@@ -544,15 +550,16 @@ function JobDetailPage() {
             {changeOrders.map((co) => (
               <li
                 key={co.id}
-                className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] pb-2 text-sm"
+                className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span>
+                <span className="jm-break min-w-0">
                   {co.description} · cost {money(co.costDelta)} · price{" "}
                   {money(co.priceDelta)}
                 </span>
                 <Button
                   type="button"
                   variant="danger"
+                  className="self-start sm:self-auto"
                   onClick={() =>
                     void api.deleteChangeOrder(job.id, co.id).then(setBundle)
                   }
@@ -572,7 +579,7 @@ function JobDetailPage() {
         <Panel title="Invoiced">
           <form
             noValidate
-            className="flex flex-wrap items-start gap-2"
+            className="grid gap-2 sm:flex sm:flex-wrap sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               if (!validateForm(e.currentTarget)) return;
@@ -592,9 +599,11 @@ function JobDetailPage() {
               min="0"
               required
               defaultValue={job.invoicedAmount}
-              className="max-w-56"
+              className="w-full sm:max-w-56"
             />
-            <Button type="submit">Save invoiced</Button>
+            <Button type="submit" className="w-full sm:w-auto">
+              Save invoiced
+            </Button>
           </form>
           <p className="mt-3 text-sm text-[var(--muted)]">
             Unbilled vs current budget price:{" "}
@@ -614,7 +623,7 @@ function EstimateForm({
   return (
     <form
       noValidate
-      className="grid gap-2 md:grid-cols-6"
+      className="grid gap-2 sm:grid-cols-2 md:grid-cols-6"
       onSubmit={(e) => {
         e.preventDefault();
         if (!validateForm(e.currentTarget)) return;
@@ -640,7 +649,7 @@ function EstimateForm({
         data-label="Description"
         required
         placeholder="Description"
-        className="md:col-span-2"
+        className="sm:col-span-2 md:col-span-2"
       />
       <Field
         name="quantity"
@@ -668,11 +677,12 @@ function EstimateForm({
         min="0"
         placeholder="Unit price"
         required
+        className="sm:col-span-2 md:col-span-1"
       />
       <Button
         type="submit"
         variant="secondary"
-        className="md:col-span-6 md:justify-self-start"
+        className="w-full sm:col-span-2 md:col-span-6 md:w-auto md:justify-self-start"
       >
         Add estimate line
       </Button>
@@ -700,7 +710,7 @@ function TimeForm({
   return (
     <form
       noValidate
-      className="grid gap-2 md:grid-cols-5"
+      className="grid gap-2 sm:grid-cols-2 md:grid-cols-5"
       onSubmit={(e) => {
         e.preventDefault();
         if (!validateForm(e.currentTarget)) return;
@@ -714,7 +724,12 @@ function TimeForm({
         }).then(() => form.reset());
       }}
     >
-      <Select name="workerId" data-label="Worker" required>
+      <Select
+        name="workerId"
+        data-label="Worker"
+        required
+        className="sm:col-span-2 md:col-span-1"
+      >
         {workers.map((w) => (
           <option key={w.id} value={w.id}>
             {w.name} ({money(w.costRate)}/h cost)
@@ -731,8 +746,17 @@ function TimeForm({
         required
       />
       <Field name="workDate" data-label="Work date" type="date" />
-      <Field name="note" data-label="Note" placeholder="Note (optional)" />
-      <Button type="submit" variant="secondary" className="self-start">
+      <Field
+        name="note"
+        data-label="Note"
+        placeholder="Note (optional)"
+        className="sm:col-span-2 md:col-span-1"
+      />
+      <Button
+        type="submit"
+        variant="secondary"
+        className="w-full sm:col-span-2 md:col-span-1 md:w-auto"
+      >
         Log time
       </Button>
     </form>
@@ -747,7 +771,7 @@ function CostForm({
   return (
     <form
       noValidate
-      className="grid gap-2 md:grid-cols-5"
+      className="grid gap-2 sm:grid-cols-2 md:grid-cols-5"
       onSubmit={(e) => {
         e.preventDefault();
         if (!validateForm(e.currentTarget)) return;
@@ -772,6 +796,7 @@ function CostForm({
         data-label="Description"
         required
         placeholder="Description"
+        className="sm:col-span-2 md:col-span-1"
       />
       <Field
         name="amount"
@@ -786,7 +811,11 @@ function CostForm({
         <option value="committed">committed</option>
         <option value="actual">actual</option>
       </Select>
-      <Button type="submit" variant="secondary" className="self-start">
+      <Button
+        type="submit"
+        variant="secondary"
+        className="w-full sm:col-span-2 md:col-span-1 md:w-auto"
+      >
         Add cost
       </Button>
     </form>
@@ -801,7 +830,7 @@ function ChangeOrderForm({
   return (
     <form
       noValidate
-      className="grid gap-2 md:grid-cols-4"
+      className="grid gap-2 sm:grid-cols-2 md:grid-cols-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (!validateForm(e.currentTarget)) return;
@@ -819,7 +848,7 @@ function ChangeOrderForm({
         data-label="Description"
         required
         placeholder="Change description"
-        className="md:col-span-2"
+        className="sm:col-span-2 md:col-span-2"
       />
       <Field
         name="costDelta"
@@ -840,7 +869,7 @@ function ChangeOrderForm({
       <Button
         type="submit"
         variant="secondary"
-        className="md:col-span-4 md:justify-self-start"
+        className="w-full sm:col-span-2 md:col-span-4 md:w-auto md:justify-self-start"
       >
         Add change order
       </Button>
@@ -869,6 +898,7 @@ function WorkersPage() {
         <Button
           type="button"
           variant="secondary"
+          className="min-h-10 flex-1 sm:flex-none"
           onClick={() =>
             void refresh().catch((e: Error) => setError(e.message))
           }
@@ -881,7 +911,7 @@ function WorkersPage() {
       <Panel title="Add worker" className="mb-6">
         <form
           noValidate
-          className="grid gap-2 md:grid-cols-4"
+          className="grid gap-2 sm:grid-cols-2 md:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (!validateForm(e.currentTarget)) return;
@@ -900,7 +930,13 @@ function WorkersPage() {
               .finally(() => setBusy(false));
           }}
         >
-          <Field name="name" data-label="Name" required placeholder="Name" />
+          <Field
+            name="name"
+            data-label="Name"
+            required
+            placeholder="Name"
+            className="sm:col-span-2 md:col-span-1"
+          />
           <Field
             name="costRate"
             data-label="Loaded cost / hour"
@@ -919,7 +955,11 @@ function WorkersPage() {
             required
             placeholder="Bill rate / hour"
           />
-          <Button type="submit" disabled={busy} className="self-start">
+          <Button
+            type="submit"
+            disabled={busy}
+            className="w-full sm:col-span-2 md:col-span-1 md:w-auto"
+          >
             {busy ? "Adding…" : "Add worker"}
           </Button>
         </form>
@@ -935,10 +975,12 @@ function WorkersPage() {
           {workers.map((w) => (
             <li
               key={w.id}
-              className="jm-surface flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              className="jm-surface flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4"
             >
-              <div>
-                <p className="font-display text-lg font-semibold">{w.name}</p>
+              <div className="min-w-0">
+                <p className="font-display jm-break text-lg font-semibold">
+                  {w.name}
+                </p>
                 <p className="text-sm text-[var(--muted)]">
                   Cost {money(w.costRate)}/h · Bill {money(w.billRate)}/h
                 </p>

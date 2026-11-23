@@ -36,16 +36,23 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     radial-gradient(ellipse 70% 50% at 0% -10%, rgba(15, 118, 110, 0.16), transparent 55%),
     radial-gradient(ellipse 55% 40% at 100% 0%, rgba(14, 165, 233, 0.1), transparent 50%),
     linear-gradient(180deg, #f4f7fa 0%, var(--paper) 40%, #e8eef4 100%);
-  background-attachment: fixed;
+}
+
+/* Fixed backgrounds are janky on iOS; only enable on larger screens */
+@media (min-width: 768px) {
+  body {
+    background-attachment: fixed;
+  }
 }
 
 body::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0.35;
@@ -54,6 +61,12 @@ body::before {
     linear-gradient(90deg, rgba(16, 24, 32, 0.035) 1px, transparent 1px);
   background-size: 28px 28px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 85%);
+}
+
+@media (min-width: 768px) {
+  body::before {
+    position: fixed;
+  }
 }
 
 #root {
@@ -143,6 +156,7 @@ textarea:invalid {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
+  min-height: 2.5rem;
   border-radius: 10px;
   border: 1px solid transparent;
   padding: 0.65rem 1rem;
@@ -225,10 +239,53 @@ textarea:invalid {
     background 160ms ease;
 }
 
-.jm-row:hover {
-  transform: translateX(3px);
-  border-color: var(--accent);
-  background: rgba(255, 255, 255, 0.92);
+@media (hover: hover) and (min-width: 640px) {
+  .jm-row:hover {
+    transform: translateX(3px);
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.92);
+  }
+}
+
+.jm-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.jm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.jm-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .jm-status-grid {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+.jm-line-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .jm-line-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
 }
 
 @keyframes jm-fade-up {

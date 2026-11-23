@@ -167,8 +167,8 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="jm-surface px-6 py-10 text-center">
-      <p className="font-display text-xl text-[var(--ink)]">{title}</p>
+    <div className="jm-surface px-4 py-8 text-center sm:px-6 sm:py-10">
+      <p className="font-display text-lg text-[var(--ink)] sm:text-xl">{title}</p>
       <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">{body}</p>
       {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </div>

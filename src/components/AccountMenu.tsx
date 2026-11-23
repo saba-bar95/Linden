@@ -62,7 +62,7 @@ export function AccountMenu() {
       <button
         ref={buttonRef}
         type="button"
-        className="jm-btn jm-btn-secondary !gap-2 !rounded-full !py-1.5 !pl-1.5 !pr-3"
+        className="jm-btn jm-btn-secondary !gap-2 !rounded-full !p-1.5 sm:!py-1.5 sm:!pl-1.5 sm:!pr-3"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"

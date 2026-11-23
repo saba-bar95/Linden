@@ -132,14 +132,14 @@ export function AuthScreen() {
   }
 
   return (
-    <div className="relative grid min-h-screen place-items-center px-4 py-12">
+    <div className="relative grid min-h-screen place-items-center px-3 py-8 sm:px-4 sm:py-12">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,rgba(15,118,110,0.22),transparent_60%)]" />
       <div className="jm-fade-up relative w-full max-w-md">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center sm:mb-8">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
             Job Margin
           </p>
-          <h1 className="font-display mt-2 text-4xl font-bold tracking-tight text-[var(--ink)]">
+          <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-[var(--ink)] sm:text-4xl">
             Know the margin
             <br />
             before it slips.
