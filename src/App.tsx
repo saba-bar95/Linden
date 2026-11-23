@@ -19,6 +19,7 @@ import {
   StatusBadge,
   TextArea,
 } from "./components/ui.tsx";
+import { SsoCallback } from "./SsoCallback.tsx";
 
 const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
@@ -906,6 +907,7 @@ function WorkersPage() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/sso-callback" element={<SsoCallback />} />
       <Route path="/" element={<JobsPage />} />
       <Route path="/jobs/:id" element={<JobDetailPage />} />
       <Route path="/workers" element={<WorkersPage />} />

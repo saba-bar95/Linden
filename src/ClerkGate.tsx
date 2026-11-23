@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "@clerk/react";
 import { AuthScreen } from "./AuthScreen.tsx";
 import { setAuthTokenGetter } from "./lib/api.ts";
 
 export function ClerkGate({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const location = useLocation();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -33,7 +35,8 @@ export function ClerkGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isSignedIn) {
+  // OAuth return path must render even before a session exists.
+  if (!isSignedIn && location.pathname !== "/sso-callback") {
     return <AuthScreen />;
   }
 
