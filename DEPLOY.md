@@ -54,7 +54,7 @@ The API also runs `migrate()` on startup and creates tables if missing.
 | Variable | Where |
 | -------- | ----- |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Vercel |
-| `VITE_API_BASE` | Railway API origin, e.g. `https://job-margin-production.up.railway.app` (no trailing slash) |
+| `VITE_API_BASE` | Full Railway API origin **with `https://`**, e.g. `https://job-margin-production.up.railway.app` (no trailing slash). Host-only values break the UI. |
 | `DATABASE_URL` | Vercel (for `/api` backup) |
 | `CLERK_SECRET_KEY` | Vercel (for `/api` backup) |
 | `CORS_ORIGIN` | Same Vercel URL (if the backup API serves browser calls) |

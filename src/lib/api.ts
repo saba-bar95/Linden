@@ -69,7 +69,15 @@ export type JobBundle = {
   margin: JobMargin;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+function normalizeApiBase(raw: string | undefined): string {
+  const value = (raw ?? "").trim().replace(/\/$/, "");
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  // Host-only values become relative paths in the browser (HTML SPA → JSON parse error).
+  return `https://${value}`;
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE);
 
 let authToken: string | null = null;
 
@@ -83,11 +91,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const text = await res.text();
+  let body: { error?: string } = {};
+  try {
+    body = text ? (JSON.parse(text) as { error?: string }) : {};
+  } catch {
+    throw new Error(
+      `API returned non-JSON from ${API_BASE || "(same origin)"}${path}. Set VITE_API_BASE to a full URL including https://`,
+    );
+  }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return body as T;
 }
 
 export const api = {
