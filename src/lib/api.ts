@@ -80,15 +80,24 @@ function normalizeApiBase(raw: string | undefined): string {
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE);
 
 let authToken: string | null = null;
+let authTokenGetter: (() => Promise<string | null>) | null = null;
 
 export function setAuthToken(token: string | null) {
   authToken = token;
+  authTokenGetter = null;
+}
+
+/** Prefer this with Clerk so each request gets a fresh JWT. */
+export function setAuthTokenGetter(getter: (() => Promise<string | null>) | null) {
+  authTokenGetter = getter;
+  authToken = null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+  const token = authTokenGetter ? await authTokenGetter() : authToken;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   const text = await res.text();
