@@ -1,0 +1,566 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
+import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { authMiddleware, getOrg, renameOrg, type AuthVars } from "./auth.ts";
+import { db, isPostgres, migrate, newId, s, todayYmd } from "./db/index.ts";
+import {
+  computeJobMargin,
+  type CostCategory,
+} from "./margin.ts";
+import { requireClerkAuth, serverClerkKeyKind } from "./security.ts";
+
+const categorySchema = z.enum(["labor", "materials", "subcontract", "other"]);
+const statusSchema = z.enum(["draft", "active", "completed", "cancelled"]);
+const costStatusSchema = z.enum(["committed", "actual"]);
+
+export const app = new Hono<{ Variables: AuthVars }>();
+
+const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+app.use(
+  "*",
+  cors({
+    origin: corsOrigin === "*" ? "*" : corsOrigin,
+    allowHeaders: ["Authorization", "Content-Type"],
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  }),
+);
+
+app.get("/api/health", (c) =>
+  c.json({
+    ok: true,
+    ready: true,
+    checks: {
+      db: isPostgres ? "postgres" : "sqlite",
+      clerk: serverClerkKeyKind(),
+    },
+  }),
+);
+
+app.get("/api/ready", async (c) => {
+  try {
+    await migrate();
+    const clerkOk = !requireClerkAuth() || serverClerkKeyKind() !== "missing";
+    if (!clerkOk) {
+      return c.json({ ok: false, reason: "clerk_missing" }, 503);
+    }
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json(
+      { ok: false, reason: e instanceof Error ? e.message : "error" },
+      503,
+    );
+  }
+});
+
+app.use("/api/*", async (c, next) => {
+  if (c.req.path === "/api/health" || c.req.path === "/api/ready") {
+    await next();
+    return;
+  }
+  return authMiddleware(c, next);
+});
+
+function asCategory(v: string): CostCategory {
+  return categorySchema.parse(v);
+}
+
+async function loadJobBundle(orgId: string, jobId: string) {
+  const jobRows = await db
+    .select()
+    .from(s.jobs)
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId)))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) throw new HTTPException(404, { message: "Job not found" });
+
+  const [lines, timeEntries, costEntries, changeOrders] = await Promise.all([
+    db
+      .select()
+      .from(s.estimateLines)
+      .where(
+        and(
+          eq(s.estimateLines.organizationId, orgId),
+          eq(s.estimateLines.jobId, jobId),
+        ),
+      ),
+    db
+      .select()
+      .from(s.timeEntries)
+      .where(
+        and(
+          eq(s.timeEntries.organizationId, orgId),
+          eq(s.timeEntries.jobId, jobId),
+        ),
+      ),
+    db
+      .select()
+      .from(s.costEntries)
+      .where(
+        and(
+          eq(s.costEntries.organizationId, orgId),
+          eq(s.costEntries.jobId, jobId),
+        ),
+      ),
+    db
+      .select()
+      .from(s.changeOrders)
+      .where(
+        and(
+          eq(s.changeOrders.organizationId, orgId),
+          eq(s.changeOrders.jobId, jobId),
+        ),
+      ),
+  ]);
+
+  const margin = computeJobMargin({
+    lines: lines.map(
+      (l: {
+        category: string;
+        quantity: number;
+        unitCost: number;
+        unitPrice: number;
+      }) => ({
+        category: asCategory(l.category),
+        quantity: l.quantity,
+        unitCost: l.unitCost,
+        unitPrice: l.unitPrice,
+      }),
+    ),
+    timeEntries: timeEntries.map(
+      (t: { hours: number; costRate: number }) => ({
+        hours: t.hours,
+        costRate: t.costRate,
+      }),
+    ),
+    costEntries: costEntries.map(
+      (e: { category: string; amount: number; status: string }) => ({
+        category: asCategory(e.category),
+        amount: e.amount,
+        status: costStatusSchema.parse(e.status),
+      }),
+    ),
+    changeOrders: changeOrders.map(
+      (co: { costDelta: number; priceDelta: number }) => ({
+        costDelta: co.costDelta,
+        priceDelta: co.priceDelta,
+      }),
+    ),
+    invoicedAmount: job.invoicedAmount,
+  });
+
+  return { job, lines, timeEntries, costEntries, changeOrders, margin };
+}
+
+app.get("/api/me", async (c) => {
+  const orgId = getOrg(c);
+  const orgs = await db
+    .select()
+    .from(s.organizations)
+    .where(eq(s.organizations.id, orgId))
+    .limit(1);
+  return c.json({
+    userId: c.get("userId"),
+    organization: orgs[0] ?? null,
+    authMode: process.env.CLERK_SECRET_KEY ? "clerk" : "local",
+  });
+});
+
+app.patch("/api/org", async (c) => {
+  const body = z.object({ name: z.string().min(1).max(120) }).parse(await c.req.json());
+  await renameOrg(getOrg(c), body.name);
+  return c.json({ ok: true });
+});
+
+app.get("/api/workers", async (c) => {
+  const orgId = getOrg(c);
+  const rows = await db
+    .select()
+    .from(s.workers)
+    .where(eq(s.workers.organizationId, orgId))
+    .orderBy(desc(s.workers.createdAt));
+  return c.json({ workers: rows });
+});
+
+app.post("/api/workers", async (c) => {
+  const body = z
+    .object({
+      name: z.string().min(1).max(120),
+      costRate: z.number().nonnegative(),
+      billRate: z.number().nonnegative(),
+      active: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+  const id = newId("wkr");
+  await db.insert(s.workers).values({
+    id,
+    organizationId: getOrg(c),
+    name: body.name,
+    costRate: body.costRate,
+    billRate: body.billRate,
+    active: body.active ?? true,
+  });
+  return c.json({ id }, 201);
+});
+
+app.patch("/api/workers/:id", async (c) => {
+  const orgId = getOrg(c);
+  const id = c.req.param("id");
+  const body = z
+    .object({
+      name: z.string().min(1).max(120).optional(),
+      costRate: z.number().nonnegative().optional(),
+      billRate: z.number().nonnegative().optional(),
+      active: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+
+  const existing = await db
+    .select()
+    .from(s.workers)
+    .where(and(eq(s.workers.organizationId, orgId), eq(s.workers.id, id)))
+    .limit(1);
+  if (!existing[0]) throw new HTTPException(404, { message: "Worker not found" });
+
+  await db
+    .update(s.workers)
+    .set({
+      name: body.name ?? existing[0].name,
+      costRate: body.costRate ?? existing[0].costRate,
+      billRate: body.billRate ?? existing[0].billRate,
+      active: body.active ?? existing[0].active,
+    })
+    .where(and(eq(s.workers.organizationId, orgId), eq(s.workers.id, id)));
+
+  return c.json({ ok: true });
+});
+
+app.get("/api/jobs", async (c) => {
+  const orgId = getOrg(c);
+  const jobs = await db
+    .select()
+    .from(s.jobs)
+    .where(eq(s.jobs.organizationId, orgId))
+    .orderBy(desc(s.jobs.updatedAt));
+
+  const summaries = [];
+  for (const job of jobs) {
+    const bundle = await loadJobBundle(orgId, job.id);
+    summaries.push({
+      ...job,
+      margin: bundle.margin,
+    });
+  }
+  return c.json({ jobs: summaries });
+});
+
+app.post("/api/jobs", async (c) => {
+  const body = z
+    .object({
+      title: z.string().min(1).max(200),
+      clientName: z.string().max(200).optional(),
+      notes: z.string().max(2000).optional(),
+    })
+    .parse(await c.req.json());
+  const id = newId("job");
+  const now = new Date().toISOString();
+  await db.insert(s.jobs).values({
+    id,
+    organizationId: getOrg(c),
+    title: body.title,
+    clientName: body.clientName ?? "",
+    notes: body.notes ?? "",
+    status: "draft",
+    invoicedAmount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return c.json({ id }, 201);
+});
+
+app.get("/api/jobs/:id", async (c) => {
+  const bundle = await loadJobBundle(getOrg(c), c.req.param("id"));
+  return c.json(bundle);
+});
+
+app.patch("/api/jobs/:id", async (c) => {
+  const orgId = getOrg(c);
+  const id = c.req.param("id");
+  const body = z
+    .object({
+      title: z.string().min(1).max(200).optional(),
+      clientName: z.string().max(200).optional(),
+      notes: z.string().max(2000).optional(),
+      status: statusSchema.optional(),
+      invoicedAmount: z.number().nonnegative().optional(),
+    })
+    .parse(await c.req.json());
+
+  const existing = await db
+    .select()
+    .from(s.jobs)
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, id)))
+    .limit(1);
+  if (!existing[0]) throw new HTTPException(404, { message: "Job not found" });
+
+  await db
+    .update(s.jobs)
+    .set({
+      title: body.title ?? existing[0].title,
+      clientName: body.clientName ?? existing[0].clientName,
+      notes: body.notes ?? existing[0].notes,
+      status: body.status ?? existing[0].status,
+      invoicedAmount: body.invoicedAmount ?? existing[0].invoicedAmount,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, id)));
+
+  return c.json(await loadJobBundle(orgId, id));
+});
+
+app.post("/api/jobs/:id/estimate-lines", async (c) => {
+  const orgId = getOrg(c);
+  const jobId = c.req.param("id");
+  await loadJobBundle(orgId, jobId);
+  const body = z
+    .object({
+      category: categorySchema,
+      description: z.string().min(1).max(300),
+      quantity: z.number().positive(),
+      unitCost: z.number().nonnegative(),
+      unitPrice: z.number().nonnegative(),
+    })
+    .parse(await c.req.json());
+
+  const id = newId("est");
+  await db.insert(s.estimateLines).values({
+    id,
+    organizationId: orgId,
+    jobId,
+    category: body.category,
+    description: body.description,
+    quantity: body.quantity,
+    unitCost: body.unitCost,
+    unitPrice: body.unitPrice,
+    sortOrder: 0,
+  });
+  await db
+    .update(s.jobs)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId)));
+  return c.json(await loadJobBundle(orgId, jobId), 201);
+});
+
+app.delete("/api/jobs/:jobId/estimate-lines/:lineId", async (c) => {
+  const orgId = getOrg(c);
+  const { jobId, lineId } = c.req.param();
+  await db
+    .delete(s.estimateLines)
+    .where(
+      and(
+        eq(s.estimateLines.organizationId, orgId),
+        eq(s.estimateLines.jobId, jobId),
+        eq(s.estimateLines.id, lineId),
+      ),
+    );
+  return c.json(await loadJobBundle(orgId, jobId));
+});
+
+app.post("/api/jobs/:id/time-entries", async (c) => {
+  const orgId = getOrg(c);
+  const jobId = c.req.param("id");
+  await loadJobBundle(orgId, jobId);
+  const body = z
+    .object({
+      workerId: z.string().min(1),
+      hours: z.number().positive(),
+      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      note: z.string().max(500).optional(),
+    })
+    .parse(await c.req.json());
+
+  const workers = await db
+    .select()
+    .from(s.workers)
+    .where(
+      and(eq(s.workers.organizationId, orgId), eq(s.workers.id, body.workerId)),
+    )
+    .limit(1);
+  if (!workers[0]) throw new HTTPException(404, { message: "Worker not found" });
+
+  const id = newId("time");
+  await db.insert(s.timeEntries).values({
+    id,
+    organizationId: orgId,
+    jobId,
+    workerId: body.workerId,
+    workDate: body.workDate ?? todayYmd(),
+    hours: body.hours,
+    costRate: workers[0].costRate,
+    note: body.note ?? "",
+  });
+  await db
+    .update(s.jobs)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId)));
+  return c.json(await loadJobBundle(orgId, jobId), 201);
+});
+
+app.delete("/api/jobs/:jobId/time-entries/:entryId", async (c) => {
+  const orgId = getOrg(c);
+  const { jobId, entryId } = c.req.param();
+  await db
+    .delete(s.timeEntries)
+    .where(
+      and(
+        eq(s.timeEntries.organizationId, orgId),
+        eq(s.timeEntries.jobId, jobId),
+        eq(s.timeEntries.id, entryId),
+      ),
+    );
+  return c.json(await loadJobBundle(orgId, jobId));
+});
+
+app.post("/api/jobs/:id/cost-entries", async (c) => {
+  const orgId = getOrg(c);
+  const jobId = c.req.param("id");
+  await loadJobBundle(orgId, jobId);
+  const body = z
+    .object({
+      category: categorySchema,
+      description: z.string().min(1).max(300),
+      amount: z.number().positive(),
+      status: costStatusSchema.default("actual"),
+      entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    })
+    .parse(await c.req.json());
+
+  const id = newId("cost");
+  await db.insert(s.costEntries).values({
+    id,
+    organizationId: orgId,
+    jobId,
+    category: body.category,
+    description: body.description,
+    amount: body.amount,
+    status: body.status,
+    entryDate: body.entryDate ?? todayYmd(),
+  });
+  await db
+    .update(s.jobs)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId)));
+  return c.json(await loadJobBundle(orgId, jobId), 201);
+});
+
+app.patch("/api/jobs/:jobId/cost-entries/:entryId", async (c) => {
+  const orgId = getOrg(c);
+  const { jobId, entryId } = c.req.param();
+  const body = z
+    .object({
+      status: costStatusSchema.optional(),
+      amount: z.number().positive().optional(),
+      description: z.string().min(1).max(300).optional(),
+    })
+    .parse(await c.req.json());
+
+  const rows = await db
+    .select()
+    .from(s.costEntries)
+    .where(
+      and(
+        eq(s.costEntries.organizationId, orgId),
+        eq(s.costEntries.jobId, jobId),
+        eq(s.costEntries.id, entryId),
+      ),
+    )
+    .limit(1);
+  if (!rows[0]) throw new HTTPException(404, { message: "Cost entry not found" });
+
+  await db
+    .update(s.costEntries)
+    .set({
+      status: body.status ?? rows[0].status,
+      amount: body.amount ?? rows[0].amount,
+      description: body.description ?? rows[0].description,
+    })
+    .where(
+      and(
+        eq(s.costEntries.organizationId, orgId),
+        eq(s.costEntries.id, entryId),
+      ),
+    );
+  return c.json(await loadJobBundle(orgId, jobId));
+});
+
+app.delete("/api/jobs/:jobId/cost-entries/:entryId", async (c) => {
+  const orgId = getOrg(c);
+  const { jobId, entryId } = c.req.param();
+  await db
+    .delete(s.costEntries)
+    .where(
+      and(
+        eq(s.costEntries.organizationId, orgId),
+        eq(s.costEntries.jobId, jobId),
+        eq(s.costEntries.id, entryId),
+      ),
+    );
+  return c.json(await loadJobBundle(orgId, jobId));
+});
+
+app.post("/api/jobs/:id/change-orders", async (c) => {
+  const orgId = getOrg(c);
+  const jobId = c.req.param("id");
+  await loadJobBundle(orgId, jobId);
+  const body = z
+    .object({
+      description: z.string().min(1).max(300),
+      costDelta: z.number(),
+      priceDelta: z.number(),
+    })
+    .parse(await c.req.json());
+
+  const id = newId("co");
+  await db.insert(s.changeOrders).values({
+    id,
+    organizationId: orgId,
+    jobId,
+    description: body.description,
+    costDelta: body.costDelta,
+    priceDelta: body.priceDelta,
+  });
+  await db
+    .update(s.jobs)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId)));
+  return c.json(await loadJobBundle(orgId, jobId), 201);
+});
+
+app.delete("/api/jobs/:jobId/change-orders/:coId", async (c) => {
+  const orgId = getOrg(c);
+  const { jobId, coId } = c.req.param();
+  await db
+    .delete(s.changeOrders)
+    .where(
+      and(
+        eq(s.changeOrders.organizationId, orgId),
+        eq(s.changeOrders.jobId, jobId),
+        eq(s.changeOrders.id, coId),
+      ),
+    );
+  return c.json(await loadJobBundle(orgId, jobId));
+});
+
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
+  }
+  if (err instanceof z.ZodError) {
+    return c.json({ error: "validation_error", details: err.issues }, 400);
+  }
+  console.error(err);
+  return c.json({ error: "server_error" }, 500);
+});
+
+export { migrate, migratePostgres } from "./db/index.ts";
