@@ -35,7 +35,7 @@ The API also runs `migrate()` on startup and creates tables if missing.
 | -------- | ----- |
 | `DATABASE_URL` | Neon URL |
 | `CLERK_SECRET_KEY` | `sk_live_…` (or `sk_test_` while wiring) |
-| `CORS_ORIGIN` | Exact Vercel URL, e.g. `https://job-margin.vercel.app` |
+| `CORS_ORIGIN` | Exact Vercel URL **with `https://`**, e.g. `https://job-margin.vercel.app` (or `*` while wiring) |
 | `PORT` | Railway sets this |
 
 ## 3. Clerk

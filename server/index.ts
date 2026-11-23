@@ -17,11 +17,29 @@ const costStatusSchema = z.enum(["committed", "actual"]);
 
 export const app = new Hono<{ Variables: AuthVars }>();
 
-const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+function normalizeOrigin(raw: string): string {
+  const value = raw.trim().replace(/\/$/, "");
+  if (!value || value === "*") return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
+const corsOriginRaw = process.env.CORS_ORIGIN ?? "*";
+const corsOrigins =
+  corsOriginRaw.trim() === "*"
+    ? ("*" as const)
+    : corsOriginRaw
+        .split(",")
+        .map(normalizeOrigin)
+        .filter(Boolean);
+
 app.use(
   "*",
   cors({
-    origin: corsOrigin === "*" ? "*" : corsOrigin,
+    origin:
+      corsOrigins === "*"
+        ? "*"
+        : (origin) => (origin && corsOrigins.includes(origin) ? origin : null),
     allowHeaders: ["Authorization", "Content-Type"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   }),
