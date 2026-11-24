@@ -21,7 +21,7 @@
   --bad-soft: #ffe4e6;
   --shadow: 0 18px 40px -28px rgba(16, 24, 32, 0.45);
   --radius: 14px;
-  --font-display: "Syne", "Avenir Next", sans-serif;
+  --font-display: "Outfit", "Avenir Next", sans-serif;
   --font-body: "Manrope", "Avenir Next", sans-serif;
   font-family: var(--font-body);
   background: var(--paper);
@@ -257,6 +257,10 @@ textarea:invalid {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.jm-shell-actions:empty {
+  display: none;
 }
 
 .jm-status-grid {

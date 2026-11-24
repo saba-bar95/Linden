@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import { secureHeaders } from "hono/secure-headers";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, getOrg, renameOrg, type AuthVars } from "./auth.ts";
@@ -9,20 +11,25 @@ import {
   computeJobMargin,
   type CostCategory,
 } from "./margin.ts";
-import { requireClerkAuth, serverClerkKeyKind } from "./security.ts";
+import { rateLimit } from "./rate-limit.ts";
+import {
+  isProductionRuntime,
+  normalizeOrigin,
+  requireClerkAuth,
+} from "./security.ts";
 
 const categorySchema = z.enum(["labor", "materials", "subcontract", "other"]);
 const statusSchema = z.enum(["draft", "active", "completed", "cancelled"]);
 const costStatusSchema = z.enum(["committed", "actual"]);
+const requiredText = (max: number) => z.string().trim().min(1).max(max);
+const optionalText = (max: number) => z.string().trim().max(max).optional();
+const money = z.number().finite().nonnegative().max(1_000_000_000);
+const rate = z.number().finite().nonnegative().max(10_000_000);
+const signedMoney = z.number().finite().min(-1_000_000_000).max(1_000_000_000);
+const hours = z.number().finite().positive().max(1_000);
+const quantity = z.number().finite().positive().max(1_000_000);
 
 export const app = new Hono<{ Variables: AuthVars }>();
-
-function normalizeOrigin(raw: string): string {
-  const value = raw.trim().replace(/\/$/, "");
-  if (!value || value === "*") return value;
-  if (/^https?:\/\//i.test(value)) return value;
-  return `https://${value}`;
-}
 
 const corsOriginRaw = process.env.CORS_ORIGIN ?? "*";
 const corsOrigins =
@@ -35,6 +42,31 @@ const corsOrigins =
 
 app.use(
   "*",
+  secureHeaders({
+    // The UI on Vercel calls this API on Railway. same-origin would block that.
+    crossOriginResourcePolicy: "cross-origin",
+    crossOriginEmbedderPolicy: false,
+    xFrameOptions: "DENY",
+    referrerPolicy: "strict-origin-when-cross-origin",
+    permissionsPolicy: {
+      camera: false,
+      microphone: false,
+      geolocation: false,
+      payment: false,
+      usb: false,
+    },
+  }),
+);
+app.use(
+  "*",
+  bodyLimit({
+    maxSize: 100 * 1024,
+    onError: (c) => c.json({ error: "Payload too large" }, 413),
+  }),
+);
+app.use("*", rateLimit());
+app.use(
+  "*",
   cors({
     origin:
       corsOrigins === "*"
@@ -45,30 +77,30 @@ app.use(
   }),
 );
 
+app.use("*", async (c, next) => {
+  if (isProductionRuntime() && !process.env.CLERK_SECRET_KEY) {
+    return c.json({ error: "Auth is not configured" }, 503);
+  }
+  await next();
+});
+
 app.get("/api/health", (c) =>
   c.json({
     ok: true,
-    ready: true,
-    checks: {
-      db: isPostgres ? "postgres" : "sqlite",
-      clerk: serverClerkKeyKind(),
-    },
+    db: isPostgres ? "postgres" : "sqlite",
   }),
 );
 
 app.get("/api/ready", async (c) => {
   try {
     await migrate();
-    const clerkOk = !requireClerkAuth() || serverClerkKeyKind() !== "missing";
-    if (!clerkOk) {
-      return c.json({ ok: false, reason: "clerk_missing" }, 503);
+    if (isProductionRuntime() && !requireClerkAuth()) {
+      return c.json({ ok: false, reason: "auth_not_configured" }, 503);
     }
     return c.json({ ok: true });
   } catch (e) {
-    return c.json(
-      { ok: false, reason: e instanceof Error ? e.message : "error" },
-      503,
-    );
+    console.error(e);
+    return c.json({ ok: false, reason: "not_ready" }, 503);
   }
 });
 
@@ -186,7 +218,7 @@ app.get("/api/me", async (c) => {
 });
 
 app.patch("/api/org", async (c) => {
-  const body = z.object({ name: z.string().min(1).max(120) }).parse(await c.req.json());
+  const body = z.object({ name: requiredText(120) }).parse(await c.req.json());
   await renameOrg(getOrg(c), body.name);
   return c.json({ ok: true });
 });
@@ -204,9 +236,9 @@ app.get("/api/workers", async (c) => {
 app.post("/api/workers", async (c) => {
   const body = z
     .object({
-      name: z.string().min(1).max(120),
-      costRate: z.number().nonnegative(),
-      billRate: z.number().nonnegative(),
+      name: requiredText(120),
+      costRate: rate,
+      billRate: rate,
       active: z.boolean().optional(),
     })
     .parse(await c.req.json());
@@ -227,9 +259,9 @@ app.patch("/api/workers/:id", async (c) => {
   const id = c.req.param("id");
   const body = z
     .object({
-      name: z.string().min(1).max(120).optional(),
-      costRate: z.number().nonnegative().optional(),
-      billRate: z.number().nonnegative().optional(),
+      name: requiredText(120).optional(),
+      costRate: rate.optional(),
+      billRate: rate.optional(),
       active: z.boolean().optional(),
     })
     .parse(await c.req.json());
@@ -251,6 +283,35 @@ app.patch("/api/workers/:id", async (c) => {
     })
     .where(and(eq(s.workers.organizationId, orgId), eq(s.workers.id, id)));
 
+  return c.json({ ok: true });
+});
+
+app.delete("/api/workers/:id", async (c) => {
+  const orgId = getOrg(c);
+  const id = c.req.param("id");
+  const existing = await db
+    .select()
+    .from(s.workers)
+    .where(and(eq(s.workers.organizationId, orgId), eq(s.workers.id, id)))
+    .limit(1);
+  if (!existing[0]) throw new HTTPException(404, { message: "Worker not found" });
+
+  const logged = await db
+    .select({ id: s.timeEntries.id })
+    .from(s.timeEntries)
+    .where(
+      and(eq(s.timeEntries.organizationId, orgId), eq(s.timeEntries.workerId, id)),
+    )
+    .limit(1);
+  if (logged[0]) {
+    throw new HTTPException(409, {
+      message: "This worker has hours on a job. Remove those time entries first.",
+    });
+  }
+
+  await db
+    .delete(s.workers)
+    .where(and(eq(s.workers.organizationId, orgId), eq(s.workers.id, id)));
   return c.json({ ok: true });
 });
 
@@ -276,9 +337,9 @@ app.get("/api/jobs", async (c) => {
 app.post("/api/jobs", async (c) => {
   const body = z
     .object({
-      title: z.string().min(1).max(200),
-      clientName: z.string().max(200).optional(),
-      notes: z.string().max(2000).optional(),
+      title: requiredText(200),
+      clientName: optionalText(200),
+      notes: optionalText(2000),
     })
     .parse(await c.req.json());
   const id = newId("job");
@@ -307,11 +368,11 @@ app.patch("/api/jobs/:id", async (c) => {
   const id = c.req.param("id");
   const body = z
     .object({
-      title: z.string().min(1).max(200).optional(),
-      clientName: z.string().max(200).optional(),
-      notes: z.string().max(2000).optional(),
+      title: requiredText(200).optional(),
+      clientName: optionalText(200).optional(),
+      notes: optionalText(2000).optional(),
       status: statusSchema.optional(),
-      invoicedAmount: z.number().nonnegative().optional(),
+      invoicedAmount: money.optional(),
     })
     .parse(await c.req.json());
 
@@ -337,6 +398,50 @@ app.patch("/api/jobs/:id", async (c) => {
   return c.json(await loadJobBundle(orgId, id));
 });
 
+app.delete("/api/jobs/:id", async (c) => {
+  const orgId = getOrg(c);
+  const id = c.req.param("id");
+  const existing = await db
+    .select({ id: s.jobs.id })
+    .from(s.jobs)
+    .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, id)))
+    .limit(1);
+  if (!existing[0]) throw new HTTPException(404, { message: "Job not found" });
+
+  const removeRows = (tx: typeof db) => [
+    tx
+      .delete(s.estimateLines)
+      .where(
+        and(eq(s.estimateLines.organizationId, orgId), eq(s.estimateLines.jobId, id)),
+      ),
+    tx
+      .delete(s.timeEntries)
+      .where(and(eq(s.timeEntries.organizationId, orgId), eq(s.timeEntries.jobId, id))),
+    tx
+      .delete(s.costEntries)
+      .where(and(eq(s.costEntries.organizationId, orgId), eq(s.costEntries.jobId, id))),
+    tx
+      .delete(s.changeOrders)
+      .where(
+        and(eq(s.changeOrders.organizationId, orgId), eq(s.changeOrders.jobId, id)),
+      ),
+    tx.delete(s.jobs).where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, id))),
+  ];
+
+  if (isPostgres) {
+    await db.transaction(async (tx: typeof db) => {
+      for (const statement of removeRows(tx)) await statement;
+    });
+  } else {
+    // better-sqlite3 rejects an async transaction callback.
+    db.transaction((tx: typeof db) => {
+      for (const statement of removeRows(tx)) statement.run();
+    });
+  }
+
+  return c.json({ ok: true });
+});
+
 app.post("/api/jobs/:id/estimate-lines", async (c) => {
   const orgId = getOrg(c);
   const jobId = c.req.param("id");
@@ -344,10 +449,10 @@ app.post("/api/jobs/:id/estimate-lines", async (c) => {
   const body = z
     .object({
       category: categorySchema,
-      description: z.string().min(1).max(300),
-      quantity: z.number().positive(),
-      unitCost: z.number().nonnegative(),
-      unitPrice: z.number().nonnegative(),
+      description: requiredText(300),
+      quantity,
+      unitCost: money,
+      unitPrice: money,
     })
     .parse(await c.req.json());
 
@@ -391,10 +496,10 @@ app.post("/api/jobs/:id/time-entries", async (c) => {
   await loadJobBundle(orgId, jobId);
   const body = z
     .object({
-      workerId: z.string().min(1),
-      hours: z.number().positive(),
+      workerId: requiredText(80),
+      hours,
       workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-      note: z.string().max(500).optional(),
+      note: z.string().trim().max(500).optional(),
     })
     .parse(await c.req.json());
 
@@ -447,8 +552,8 @@ app.post("/api/jobs/:id/cost-entries", async (c) => {
   const body = z
     .object({
       category: categorySchema,
-      description: z.string().min(1).max(300),
-      amount: z.number().positive(),
+      description: requiredText(300),
+      amount: money.positive(),
       status: costStatusSchema.default("actual"),
       entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     })
@@ -478,8 +583,8 @@ app.patch("/api/jobs/:jobId/cost-entries/:entryId", async (c) => {
   const body = z
     .object({
       status: costStatusSchema.optional(),
-      amount: z.number().positive().optional(),
-      description: z.string().min(1).max(300).optional(),
+      amount: money.positive().optional(),
+      description: requiredText(300).optional(),
     })
     .parse(await c.req.json());
 
@@ -533,9 +638,9 @@ app.post("/api/jobs/:id/change-orders", async (c) => {
   await loadJobBundle(orgId, jobId);
   const body = z
     .object({
-      description: z.string().min(1).max(300),
-      costDelta: z.number(),
-      priceDelta: z.number(),
+      description: requiredText(300),
+      costDelta: signedMoney,
+      priceDelta: signedMoney,
     })
     .parse(await c.req.json());
 

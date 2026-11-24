@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useSignIn, useSignUp } from "@clerk/react";
+import { Logo } from "./components/Logo.tsx";
 import { Button, Field } from "./components/ui.tsx";
 import { validateForm } from "./lib/form.ts";
 
@@ -136,8 +137,9 @@ export function AuthScreen() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,rgba(15,118,110,0.22),transparent_60%)]" />
       <div className="jm-fade-up relative w-full max-w-md">
         <div className="mb-6 text-center sm:mb-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
-            Job Margin
+          <Logo className="mx-auto h-12 w-12" />
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
+            Linden
           </p>
           <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-[var(--ink)] sm:text-4xl">
             Know the margin

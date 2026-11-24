@@ -1,3 +1,33 @@
+export function isProductionRuntime(): boolean {
+  return (
+    Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+    Boolean(process.env.VERCEL) ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
+export function normalizeOrigin(raw: string): string {
+  const value = raw.trim().replace(/\/$/, "");
+  if (!value || value === "*") return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
+/** Frontend origins allowed to present a Clerk session token. */
+export function clerkAuthorizedParties(): string[] | undefined {
+  const raw = (
+    process.env.CLERK_AUTHORIZED_PARTIES ??
+    process.env.CORS_ORIGIN ??
+    ""
+  ).trim();
+  if (!raw || raw === "*") return undefined;
+  const parties = raw
+    .split(",")
+    .map(normalizeOrigin)
+    .filter((origin) => /^https?:\/\//i.test(origin));
+  return parties.length > 0 ? parties : undefined;
+}
+
 export function serverClerkKeyKind(): "live" | "test" | "missing" {
   const key = process.env.CLERK_SECRET_KEY ?? "";
   if (key.startsWith("sk_live_")) return "live";
@@ -12,10 +42,7 @@ export function requireClerkAuth(): boolean {
 export function assertServerClerkKeys(): { ok: true } | { ok: false; reason: string } {
   const kind = serverClerkKeyKind();
   const requireLive = process.env.CLERK_REQUIRE_LIVE_KEYS === "true";
-  const looksProd =
-    Boolean(process.env.RAILWAY_ENVIRONMENT) ||
-    Boolean(process.env.VERCEL) ||
-    process.env.NODE_ENV === "production";
+  const looksProd = isProductionRuntime();
 
   if (looksProd && kind === "missing") {
     return {

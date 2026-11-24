@@ -1,6 +1,6 @@
-# Deploy Job Margin (Neon + Railway + Vercel)
+# Deploy Linden (Neon + Railway + Vercel)
 
-Same topology as COSTI.
+The browser app is on Vercel. The API runs on Railway, with a same-origin backup on Vercel. Data is in Neon Postgres.
 
 ```
 Browser  →  Vercel (static Vite app)
@@ -35,7 +35,7 @@ The API also runs `migrate()` on startup and creates tables if missing.
 | -------- | ----- |
 | `DATABASE_URL` | Neon URL |
 | `CLERK_SECRET_KEY` | `sk_live_…` (or `sk_test_` while wiring) |
-| `CORS_ORIGIN` | Exact Vercel URL **with `https://`**, e.g. `https://job-margin.vercel.app` (or `*` while wiring) |
+| `CORS_ORIGIN` | Exact Vercel URL **with `https://`**, e.g. `https://linden.vercel.app` (or `*` while wiring) |
 | `PORT` | Railway sets this |
 
 ## 3. Clerk
@@ -54,7 +54,7 @@ The API also runs `migrate()` on startup and creates tables if missing.
 | Variable | Where |
 | -------- | ----- |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Vercel |
-| `VITE_API_BASE` | Full Railway API origin **with `https://`**, e.g. `https://job-margin-production.up.railway.app` (no trailing slash). Host-only values break the UI. |
+| `VITE_API_BASE` | Full Railway API origin **with `https://`**, e.g. `https://linden-production.up.railway.app` (no trailing slash). Host-only values break the UI. |
 | `DATABASE_URL` | Vercel (for `/api` backup) |
 | `CLERK_SECRET_KEY` | Vercel (for `/api` backup) |
 | `CORS_ORIGIN` | Same Vercel URL (if the backup API serves browser calls) |

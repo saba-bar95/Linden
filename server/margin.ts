@@ -1,4 +1,4 @@
-/** Pure job-margin math — the rules a shop owner can trust. */
+/** Pure margin math — the rules a shop owner can trust. */
 
 export type CostCategory = "labor" | "materials" | "subcontract" | "other";
 

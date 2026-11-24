@@ -4,7 +4,7 @@ import { migratePostgres } from "./db/index.ts";
 import { app } from "./index.ts";
 import {
   assertServerClerkKeys,
-  requireClerkAuth,
+  isProductionRuntime,
   serverClerkKeyKind,
 } from "./security.ts";
 
@@ -15,19 +15,24 @@ const dbMode = process.env.DATABASE_URL?.startsWith("postgres")
 
 const keyGate = assertServerClerkKeys();
 if (!keyGate.ok) {
-  console.error(`Job Margin API refused to start: ${keyGate.reason}`);
+  console.error(`Linden API refused to start: ${keyGate.reason}`);
   process.exit(1);
 }
 
 const kind = serverClerkKeyKind();
-if (kind === "test" && requireClerkAuth()) {
+if (isProductionRuntime() && kind === "test") {
   console.warn(
-    "WARNING: CLERK_SECRET_KEY is sk_test_ on a production-like host. Use sk_live_ before shipping.",
+    "WARNING: CLERK_SECRET_KEY is sk_test_ on a production host. Use sk_live_ before real users.",
+  );
+}
+if (isProductionRuntime() && (process.env.CORS_ORIGIN ?? "*").trim() === "*") {
+  console.warn(
+    "WARNING: CORS_ORIGIN is *. Set it to your exact Vercel URL so other sites cannot call the API.",
   );
 }
 
 await migratePostgres();
 console.log(
-  `Job Margin API http://localhost:${port} (${dbMode}, clerk=${kind})`,
+  `Linden API http://localhost:${port} (${dbMode}, clerk=${kind})`,
 );
 serve({ fetch: app.fetch, port });

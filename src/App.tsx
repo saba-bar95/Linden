@@ -1,5 +1,24 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, Navigate, NavLink, Route, Routes, useParams } from "react-router-dom";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   api,
   money,
@@ -8,6 +27,7 @@ import {
   type Worker,
 } from "./lib/api.ts";
 import { AccountMenu } from "./components/AccountMenu.tsx";
+import { Logo } from "./components/Logo.tsx";
 import {
   Button,
   EmptyState,
@@ -24,71 +44,106 @@ import { validateForm } from "./lib/form.ts";
 
 const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
-function Shell({
+type PageHeader = { title?: string; eyebrow?: string };
+
+const PageHeaderContext = createContext<(next: PageHeader) => void>(() => {});
+const PageActionsContext = createContext<HTMLElement | null>(null);
+
+function usePageHeader(title?: string, eyebrow?: string, active = true) {
+  const setHeader = useContext(PageHeaderContext);
+  useLayoutEffect(() => {
+    if (!active) return;
+    setHeader({ title, eyebrow });
+  }, [active, eyebrow, setHeader, title]);
+}
+
+function PageActions({
   children,
-  eyebrow,
-  title,
-  actions,
+  active = true,
 }: {
   children: ReactNode;
-  eyebrow?: string;
-  title?: string;
-  actions?: ReactNode;
+  active?: boolean;
 }) {
+  const target = useContext(PageActionsContext);
+  if (!target || !active) return null;
+  return createPortal(children, target);
+}
+
+function AppLayout() {
+  const { pathname } = useLocation();
+  const onWorkers = pathname === "/workers";
+  const onJob = pathname.startsWith("/jobs/");
+  const [header, setHeader] = useState<PageHeader>({});
+  const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
+
   return (
-    <div className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-8">
-      <header className="jm-fade-up relative z-30 mb-6 border-b border-[var(--line)] pb-4 sm:mb-8 sm:pb-5">
-        <div className="flex items-start justify-between gap-3">
-          <Link to="/" className="min-w-0 flex-1">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-[var(--accent)] sm:text-xs">
-              Job Margin
-            </p>
-            <h1 className="font-display jm-break mt-1 text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl md:text-4xl">
-              {title ?? "Estimate vs actual"}
-            </h1>
-          </Link>
-          {hasClerk ? <AccountMenu /> : null}
-        </div>
-        <p className="jm-break mt-1 text-sm text-[var(--muted)]">
-          {eyebrow ?? "Track budget, labor, and change orders in one place."}
-        </p>
-        <div className="jm-toolbar mt-4">
-          <nav className="flex min-w-0 flex-1 gap-1 rounded-xl bg-[#e8eef4] p-1 sm:flex-none">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
-                  isActive
-                    ? "bg-white text-[var(--ink)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--ink)]"
-                }`
-              }
-            >
-              Jobs
-            </NavLink>
-            <NavLink
-              to="/workers"
-              className={({ isActive }) =>
-                `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
-                  isActive
-                    ? "bg-white text-[var(--ink)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--ink)]"
-                }`
-              }
-            >
-              Workers
-            </NavLink>
-          </nav>
-          {actions ? (
-            <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
-              {actions}
+    <PageHeaderContext.Provider value={setHeader}>
+      <PageActionsContext.Provider value={actionsEl}>
+        <div className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-8">
+          <header className="relative z-30 mb-6 border-b border-[var(--line)] pb-4 sm:mb-8 sm:pb-5">
+            <div className="flex items-start justify-between gap-3">
+              <Link to="/" className="flex min-w-0 flex-1 items-start gap-3">
+                <Logo className="mt-1 h-10 w-10 shrink-0 sm:h-11 sm:w-11" />
+                <span className="min-w-0">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-[var(--accent)] sm:text-xs">
+                    Linden
+                  </p>
+                  <h1 className="font-display jm-break mt-1 text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl md:text-4xl">
+                    {header.title ?? "Estimate vs actual"}
+                  </h1>
+                </span>
+              </Link>
+              {hasClerk ? <AccountMenu /> : null}
             </div>
-          ) : null}
+            <p className="jm-break mt-1 text-sm text-[var(--muted)]">
+              {header.eyebrow ??
+                "Track budget, labor, and change orders in one place."}
+            </p>
+            <div className="jm-toolbar mt-4">
+              <nav className="flex min-w-0 flex-1 gap-1 rounded-xl bg-[#e8eef4] p-1 sm:flex-none">
+                <NavLink
+                  to="/"
+                  end
+                  className={({ isActive }) =>
+                    `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
+                      isActive
+                        ? "bg-white text-[var(--ink)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--ink)]"
+                    }`
+                  }
+                >
+                  Jobs
+                </NavLink>
+                <NavLink
+                  to="/workers"
+                  className={({ isActive }) =>
+                    `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
+                      isActive
+                        ? "bg-white text-[var(--ink)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--ink)]"
+                    }`
+                  }
+                >
+                  Workers
+                </NavLink>
+              </nav>
+              <div
+                ref={setActionsEl}
+                className="jm-shell-actions flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto"
+              />
+            </div>
+          </header>
+          {/* Keep both lists mounted so tab changes do not refetch or replay them. */}
+          <div hidden={onWorkers || onJob}>
+            <JobsPage />
+          </div>
+          <div hidden={!onWorkers}>
+            <WorkersPage />
+          </div>
+          {onJob ? <Outlet /> : null}
         </div>
-      </header>
-      <div className="jm-fade-up-delay">{children}</div>
-    </div>
+      </PageActionsContext.Provider>
+    </PageHeaderContext.Provider>
   );
 }
 
@@ -98,6 +153,10 @@ function JobsPage() {
   const [clientName, setClientName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmJobId, setConfirmJobId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const jobsActive = useLocation().pathname === "/";
+  usePageHeader(undefined, undefined, jobsActive);
 
   async function refresh() {
     const data = await api.jobs();
@@ -105,8 +164,9 @@ function JobsPage() {
   }
 
   useEffect(() => {
+    if (!jobsActive) return;
     void refresh().catch((e: Error) => setError(e.message));
-  }, []);
+  }, [jobsActive]);
 
   async function createJob(e: FormEvent) {
     e.preventDefault();
@@ -125,8 +185,8 @@ function JobsPage() {
   }
 
   return (
-    <Shell
-      actions={
+    <>
+      <PageActions active={jobsActive}>
         <Button
           type="button"
           variant="secondary"
@@ -137,8 +197,7 @@ function JobsPage() {
         >
           Refresh
         </Button>
-      }
-    >
+      </PageActions>
       {error && <ErrorBanner message={error} />}
 
       <Panel title="New job" className="mb-6">
@@ -183,70 +242,121 @@ function JobsPage() {
       ) : (
         <div className="space-y-3">
           {jobs.map((job) => (
-            <Link
-              key={job.id}
-              to={`/jobs/${job.id}`}
-              className="jm-row jm-surface block p-3 sm:p-4"
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <p className="font-display jm-break text-base font-semibold text-[var(--ink)] sm:text-lg">
-                      {job.title}
+            <div key={job.id} className="jm-row jm-surface p-3 sm:p-4">
+              <Link to={`/jobs/${job.id}`} className="block">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <p className="font-display jm-break text-base font-semibold text-[var(--ink)] sm:text-lg">
+                        {job.title}
+                      </p>
+                      <StatusBadge status={job.status} />
+                    </div>
+                    <p className="jm-break text-sm text-[var(--muted)]">
+                      {job.clientName || "No client"}
                     </p>
-                    <StatusBadge status={job.status} />
                   </div>
-                  <p className="jm-break text-sm text-[var(--muted)]">
-                    {job.clientName || "No client"}
-                  </p>
+                  {job.margin && (
+                    <div className="shrink-0 text-left text-sm sm:min-w-40 sm:text-right">
+                      <p
+                        className={`font-display text-xl font-bold ${
+                          job.margin.overBudget
+                            ? "text-[var(--bad)]"
+                            : "text-[var(--ok)]"
+                        }`}
+                      >
+                        {money(job.margin.margin)}
+                        {job.margin.marginPct != null
+                          ? ` · ${job.margin.marginPct}%`
+                          : ""}
+                      </p>
+                      <p className="text-[var(--muted)]">
+                        Forecast {money(job.margin.forecastCost)} / budget{" "}
+                        {money(job.margin.budgetCost)}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 {job.margin && (
-                  <div className="shrink-0 text-left text-sm sm:min-w-40 sm:text-right">
-                    <p
-                      className={`font-display text-xl font-bold ${
-                        job.margin.overBudget
-                          ? "text-[var(--bad)]"
-                          : "text-[var(--ok)]"
-                      }`}
-                    >
-                      {money(job.margin.margin)}
-                      {job.margin.marginPct != null
-                        ? ` · ${job.margin.marginPct}%`
-                        : ""}
-                    </p>
-                    <p className="text-[var(--muted)]">
-                      Forecast {money(job.margin.forecastCost)} / budget{" "}
-                      {money(job.margin.budgetCost)}
-                    </p>
+                  <div className="mt-3">
+                    <MarginMeter
+                      budgetCost={job.margin.budgetCost}
+                      forecastCost={job.margin.forecastCost}
+                      overBudget={job.margin.overBudget}
+                    />
                   </div>
                 )}
+              </Link>
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                {confirmJobId === job.id ? (
+                  <>
+                    <p className="mr-auto text-sm text-[var(--muted)]">
+                      Deletes the estimate, time, costs, and change orders.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={deletingId === job.id}
+                      onClick={() => setConfirmJobId(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={deletingId === job.id}
+                      onClick={() => {
+                        setDeletingId(job.id);
+                        setError(null);
+                        void api
+                          .deleteJob(job.id)
+                          .then(() => refresh())
+                          .then(() => setConfirmJobId(null))
+                          .catch((e: Error) => setError(e.message))
+                          .finally(() => setDeletingId(null));
+                      }}
+                    >
+                      {deletingId === job.id ? "Deleting…" : "Delete job"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => setConfirmJobId(job.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
-              {job.margin && (
-                <div className="mt-3">
-                  <MarginMeter
-                    budgetCost={job.margin.budgetCost}
-                    forecastCost={job.margin.forecastCost}
-                    overBudget={job.margin.overBudget}
-                  />
-                </div>
-              )}
-            </Link>
+            </div>
           ))}
         </div>
       )}
-    </Shell>
+    </>
   );
 }
 
 function JobDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [bundle, setBundle] = useState<JobBundle | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [metaTitle, setMetaTitle] = useState("");
   const [metaClient, setMetaClient] = useState("");
   const [metaNotes, setMetaNotes] = useState("");
+  const onThisJob = useLocation().pathname.startsWith("/jobs/");
+  usePageHeader(
+    bundle?.job.title,
+    bundle
+      ? `${bundle.job.clientName || "No client"} · live margin`
+      : undefined,
+    onThisJob && bundle != null,
+  );
 
   async function refresh() {
     if (!id) return;
@@ -264,9 +374,7 @@ function JobDetailPage() {
 
   if (!bundle) {
     return (
-      <Shell>
-        <p className="text-sm text-[var(--muted)]">{error ?? "Loading job…"}</p>
-      </Shell>
+      <p className="text-sm text-[var(--muted)]">{error ?? "Loading job…"}</p>
     );
   }
 
@@ -284,11 +392,8 @@ function JobDetailPage() {
   }
 
   return (
-    <Shell
-      title={job.title}
-      eyebrow={`${job.clientName || "No client"} · live margin`}
-      actions={
-        <>
+    <>
+      <PageActions>
           <Button
             type="button"
             variant="secondary"
@@ -307,9 +412,48 @@ function JobDetailPage() {
           >
             {editingMeta ? "Cancel edit" : "Edit details"}
           </Button>
-        </>
-      }
-    >
+          {confirmDelete ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="min-h-10 flex-1 sm:flex-none"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                className="min-h-10 flex-1 sm:flex-none"
+                disabled={deleting}
+                onClick={() => {
+                  setDeleting(true);
+                  setError(null);
+                  void api
+                    .deleteJob(job.id)
+                    .then(() => navigate("/"))
+                    .catch((e: Error) => {
+                      setError(e.message);
+                      setDeleting(false);
+                    });
+                }}
+              >
+                {deleting ? "Deleting…" : "Confirm delete"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="danger"
+              className="min-h-10 flex-1 sm:flex-none"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete job
+            </Button>
+          )}
+      </PageActions>
       {error && <ErrorBanner message={error} />}
 
       <div className="mb-4">
@@ -319,6 +463,11 @@ function JobDetailPage() {
         >
           ← All jobs
         </Link>
+        {confirmDelete && (
+          <p className="mt-2 text-sm text-[var(--bad)]">
+            This removes the job and its estimate, time, costs, and change orders.
+          </p>
+        )}
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
@@ -611,7 +760,7 @@ function JobDetailPage() {
           </p>
         </Panel>
       </div>
-    </Shell>
+    </>
   );
 }
 
@@ -881,20 +1030,27 @@ function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmWorkerId, setConfirmWorkerId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const workersActive = useLocation().pathname === "/workers";
+  usePageHeader(
+    "Crew rates",
+    "Loaded cost and bill rates for time entries",
+    workersActive,
+  );
 
   async function refresh() {
     setWorkers((await api.workers()).workers);
   }
 
   useEffect(() => {
+    if (!workersActive) return;
     void refresh().catch((e: Error) => setError(e.message));
-  }, []);
+  }, [workersActive]);
 
   return (
-    <Shell
-      title="Crew rates"
-      eyebrow="Loaded cost and bill rates for time entries"
-      actions={
+    <>
+      <PageActions active={workersActive}>
         <Button
           type="button"
           variant="secondary"
@@ -905,8 +1061,7 @@ function WorkersPage() {
         >
           Refresh
         </Button>
-      }
-    >
+      </PageActions>
       {error && <ErrorBanner message={error} />}
       <Panel title="Add worker" className="mb-6">
         <form
@@ -968,7 +1123,7 @@ function WorkersPage() {
       {workers.length === 0 ? (
         <EmptyState
           title="No workers yet"
-          body="Add your crew with loaded cost rates so time logs feed job margin correctly."
+          body="Add your crew with loaded cost rates so time logs feed each job's margin."
         />
       ) : (
         <ul className="space-y-3">
@@ -985,12 +1140,51 @@ function WorkersPage() {
                   Cost {money(w.costRate)}/h · Bill {money(w.billRate)}/h
                 </p>
               </div>
-              <StatusBadge status={w.active ? "active" : "cancelled"} />
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={w.active ? "active" : "cancelled"} />
+                {confirmWorkerId === w.id ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={deletingId === w.id}
+                      onClick={() => setConfirmWorkerId(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={deletingId === w.id}
+                      onClick={() => {
+                        setDeletingId(w.id);
+                        setError(null);
+                        void api
+                          .deleteWorker(w.id)
+                          .then(() => refresh())
+                          .then(() => setConfirmWorkerId(null))
+                          .catch((e: Error) => setError(e.message))
+                          .finally(() => setDeletingId(null));
+                      }}
+                    >
+                      {deletingId === w.id ? "Deleting…" : "Delete worker"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => setConfirmWorkerId(w.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </Shell>
+    </>
   );
 }
 
@@ -998,10 +1192,12 @@ export default function App() {
   return (
     <Routes>
       <Route path="/sso-callback" element={<SsoCallback />} />
-      <Route path="/" element={<JobsPage />} />
-      <Route path="/jobs/:id" element={<JobDetailPage />} />
-      <Route path="/workers" element={<WorkersPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route element={<AppLayout />}>
+        <Route index element={null} />
+        <Route path="/jobs/:id" element={<JobDetailPage />} />
+        <Route path="/workers" element={null} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }

@@ -29,7 +29,7 @@ export function ClerkGate({ children }: { children: ReactNode }) {
     return (
       <div className="grid min-h-screen place-items-center text-[var(--muted)]">
         <p className="jm-fade-up text-sm font-medium tracking-wide">
-          Loading Job Margin…
+          Loading Linden…
         </p>
       </div>
     );

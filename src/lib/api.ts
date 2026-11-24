@@ -134,6 +134,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  deleteJob: (id: string) =>
+    request<{ ok: true }>(`/api/jobs/${id}`, { method: "DELETE" }),
   addEstimateLine: (jobId: string, body: Record<string, unknown>) =>
     request<JobBundle>(`/api/jobs/${jobId}/estimate-lines`, {
       method: "POST",
@@ -185,6 +187,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  deleteWorker: (id: string) =>
+    request<{ ok: true }>(`/api/workers/${id}`, { method: "DELETE" }),
 };
 
 export function money(n: number): string {

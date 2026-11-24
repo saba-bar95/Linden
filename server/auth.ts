@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 import { createClerkClient, verifyToken } from "@clerk/backend";
 import { db, newId, s } from "./db/index.ts";
+import { clerkAuthorizedParties, isProductionRuntime } from "./security.ts";
 
 export type AuthVars = {
   userId: string;
@@ -42,6 +43,9 @@ export const authMiddleware = createMiddleware<{
   const secret = process.env.CLERK_SECRET_KEY;
 
   if (!secret) {
+    if (isProductionRuntime()) {
+      throw new HTTPException(503, { message: "Auth is not configured" });
+    }
     const orgId = await ensureMembership("dev_local_user", "Local shop");
     c.set("userId", "dev_local_user");
     c.set("organizationId", orgId);
@@ -57,7 +61,11 @@ export const authMiddleware = createMiddleware<{
 
   let userId: string;
   try {
-    const payload = await verifyToken(token, { secretKey: secret });
+    const parties = clerkAuthorizedParties();
+    const payload = await verifyToken(token, {
+      secretKey: secret,
+      ...(parties ? { authorizedParties: parties } : {}),
+    });
     userId = payload.sub;
     if (!userId) throw new Error("no sub");
   } catch {
