@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useSignIn, useSignUp } from "@clerk/react";
-import { Logo } from "./components/Logo.tsx";
+import { MarketingLanding } from "./components/MarketingLanding.tsx";
 import { Button, Field } from "./components/ui.tsx";
 import { validateForm } from "./lib/form.ts";
 
@@ -33,6 +33,13 @@ function GoogleMark() {
       />
     </svg>
   );
+}
+
+function scrollToAuth() {
+  document.getElementById("auth")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
 }
 
 export function AuthScreen() {
@@ -96,7 +103,9 @@ export function AuthScreen() {
       return;
     }
     if (signIn.status === "needs_second_factor") {
-      setLocalError("MFA is enabled on this account — use the Clerk dashboard to finish setup, or disable MFA for demos.");
+      setLocalError(
+        "MFA is enabled on this account — use the Clerk dashboard to finish setup, or disable MFA for demos.",
+      );
       return;
     }
     await finalizeSignIn();
@@ -132,207 +141,203 @@ export function AuthScreen() {
     await finalizeSignUp();
   }
 
-  return (
-    <div className="relative grid min-h-screen place-items-center px-3 py-8 sm:px-4 sm:py-12">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,rgba(15,118,110,0.22),transparent_60%)]" />
-      <div className="jm-fade-up relative w-full max-w-md">
-        <div className="mb-6 text-center sm:mb-8">
-          <Logo className="mx-auto h-12 w-12" />
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
-            Linden
-          </p>
-          <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-[var(--ink)] sm:text-4xl">
-            Know the margin
-            <br />
-            before it slips.
-          </h1>
-          <p className="mt-3 text-sm text-[var(--muted)]">
-            Estimate vs actual costing for shops and crews.
-          </p>
-        </div>
+  const authPanel = (
+    <div className="jm-surface landing-auth-panel p-6 sm:p-7">
+      <div className="mb-5 flex gap-2 rounded-xl bg-[#e8eef4] p-1">
+        <button
+          type="button"
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            mode === "sign-in"
+              ? "bg-white text-[var(--ink)] shadow-sm"
+              : "text-[var(--muted)]"
+          }`}
+          onClick={() => {
+            setMode("sign-in");
+            setLocalError(null);
+          }}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            mode === "sign-up" || mode === "verify"
+              ? "bg-white text-[var(--ink)] shadow-sm"
+              : "text-[var(--muted)]"
+          }`}
+          onClick={() => {
+            setMode("sign-up");
+            setLocalError(null);
+          }}
+        >
+          Create account
+        </button>
+      </div>
 
-        <div className="jm-surface p-6 sm:p-7">
-          <div className="mb-5 flex gap-2 rounded-xl bg-[#e8eef4] p-1">
-            <button
-              type="button"
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                mode === "sign-in"
-                  ? "bg-white text-[var(--ink)] shadow-sm"
-                  : "text-[var(--muted)]"
-              }`}
-              onClick={() => {
-                setMode("sign-in");
-                setLocalError(null);
-              }}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                mode === "sign-up" || mode === "verify"
-                  ? "bg-white text-[var(--ink)] shadow-sm"
-                  : "text-[var(--muted)]"
-              }`}
-              onClick={() => {
-                setMode("sign-up");
-                setLocalError(null);
-              }}
-            >
-              Create account
-            </button>
+      {mode !== "verify" && (
+        <div className="mb-5 space-y-3">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full !gap-2"
+            disabled={busy}
+            onClick={() => void signInWithGoogle()}
+          >
+            <GoogleMark />
+            Continue with Google
+          </Button>
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            <span className="h-px flex-1 bg-[var(--line)]" />
+            or email
+            <span className="h-px flex-1 bg-[var(--line)]" />
           </div>
+        </div>
+      )}
 
-          {mode !== "verify" && (
-            <div className="mb-5 space-y-3">
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full !gap-2"
-                disabled={busy}
-                onClick={() => void signInWithGoogle()}
-              >
-                <GoogleMark />
-                Continue with Google
-              </Button>
-              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                <span className="h-px flex-1 bg-[var(--line)]" />
-                or email
-                <span className="h-px flex-1 bg-[var(--line)]" />
-              </div>
-            </div>
+      {mode === "verify" ? (
+        <form
+          noValidate
+          className="space-y-3"
+          onSubmit={(e) => {
+            if (!validateForm(e.currentTarget)) {
+              e.preventDefault();
+              return;
+            }
+            void onVerify(e);
+          }}
+        >
+          <p className="text-sm text-[var(--muted)]">
+            Enter the code we sent to <strong>{email}</strong>.
+          </p>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Verification code
+            </span>
+            <Field
+              name="code"
+              data-label="Verification code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+            />
+          </label>
+          {(localError || fieldError(signUpErrors, "code")) && (
+            <p
+              role="alert"
+              className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
+            >
+              {localError ?? fieldError(signUpErrors, "code")}
+            </p>
           )}
-
-          {mode === "verify" ? (
-            <form
-              noValidate
-              className="space-y-3"
-              onSubmit={(e) => {
-                if (!validateForm(e.currentTarget)) {
-                  e.preventDefault();
-                  return;
-                }
-                void onVerify(e);
-              }}
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "Verifying…" : "Verify email"}
+          </Button>
+        </form>
+      ) : (
+        <form
+          noValidate
+          className="space-y-3"
+          onSubmit={(e) => {
+            if (!validateForm(e.currentTarget)) {
+              e.preventDefault();
+              return;
+            }
+            if (mode === "sign-in") void onSignIn(e);
+            else void onSignUp(e);
+          }}
+        >
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Email
+            </span>
+            <Field
+              name="email"
+              data-label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Password
+            </span>
+            <Field
+              name="password"
+              data-label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={
+                mode === "sign-in" ? "current-password" : "new-password"
+              }
+              required
+              minLength={8}
+            />
+          </label>
+          {(localError ||
+            fieldError(
+              mode === "sign-in" ? signInErrors : signUpErrors,
+              "identifier",
+            ) ||
+            fieldError(
+              mode === "sign-in" ? signInErrors : signUpErrors,
+              "password",
+            ) ||
+            fieldError(
+              mode === "sign-in" ? signInErrors : signUpErrors,
+              "email_address",
+            )) && (
+            <p
+              role="alert"
+              className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
             >
-              <p className="text-sm text-[var(--muted)]">
-                Enter the code we sent to <strong>{email}</strong>.
-              </p>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Verification code
-                </span>
-                <Field
-                  name="code"
-                  data-label="Verification code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  required
-                />
-              </label>
-              {(localError || fieldError(signUpErrors, "code")) && (
-                <p
-                  role="alert"
-                  className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
-                >
-                  {localError ?? fieldError(signUpErrors, "code")}
-                </p>
-              )}
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy ? "Verifying…" : "Verify email"}
-              </Button>
-            </form>
-          ) : (
-            <form
-              noValidate
-              className="space-y-3"
-              onSubmit={(e) => {
-                if (!validateForm(e.currentTarget)) {
-                  e.preventDefault();
-                  return;
-                }
-                if (mode === "sign-in") void onSignIn(e);
-                else void onSignUp(e);
-              }}
-            >
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Email
-                </span>
-                <Field
-                  name="email"
-                  data-label="Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  required
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Password
-                </span>
-                <Field
-                  name="password"
-                  data-label="Password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={
-                    mode === "sign-in" ? "current-password" : "new-password"
-                  }
-                  required
-                  minLength={8}
-                />
-              </label>
-              {(localError ||
+              {localError ??
                 fieldError(
                   mode === "sign-in" ? signInErrors : signUpErrors,
                   "identifier",
-                ) ||
-                fieldError(
-                  mode === "sign-in" ? signInErrors : signUpErrors,
-                  "password",
-                ) ||
+                ) ??
                 fieldError(
                   mode === "sign-in" ? signInErrors : signUpErrors,
                   "email_address",
-                )) && (
-                <p
-                  role="alert"
-                  className="rounded-lg bg-[var(--bad-soft)] px-3 py-2 text-sm font-medium text-[var(--bad)]"
-                >
-                  {localError ??
-                    fieldError(
-                      mode === "sign-in" ? signInErrors : signUpErrors,
-                      "identifier",
-                    ) ??
-                    fieldError(
-                      mode === "sign-in" ? signInErrors : signUpErrors,
-                      "email_address",
-                    ) ??
-                    fieldError(
-                      mode === "sign-in" ? signInErrors : signUpErrors,
-                      "password",
-                    )}
-                </p>
-              )}
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy
-                  ? mode === "sign-in"
-                    ? "Signing in…"
-                    : "Creating…"
-                  : mode === "sign-in"
-                    ? "Sign in"
-                    : "Create account"}
-              </Button>
-            </form>
+                ) ??
+                fieldError(
+                  mode === "sign-in" ? signInErrors : signUpErrors,
+                  "password",
+                )}
+            </p>
           )}
-        </div>
-      </div>
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy
+              ? mode === "sign-in"
+                ? "Signing in…"
+                : "Creating…"
+              : mode === "sign-in"
+                ? "Sign in"
+                : "Create account"}
+          </Button>
+        </form>
+      )}
     </div>
+  );
+
+  return (
+    <MarketingLanding
+      authPanel={authPanel}
+      onSignInClick={() => {
+        setMode("sign-in");
+        setLocalError(null);
+        scrollToAuth();
+      }}
+      onSignUpClick={() => {
+        setMode("sign-up");
+        setLocalError(null);
+        scrollToAuth();
+      }}
+    />
   );
 }
