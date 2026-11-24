@@ -39,10 +39,31 @@ export function requireClerkAuth(): boolean {
   return Boolean(process.env.CLERK_SECRET_KEY);
 }
 
+/** True on Railway/Vercel unless CLERK_REQUIRE_LIVE_KEYS=false. */
+export function requireLiveClerkKeys(): boolean {
+  if (process.env.CLERK_REQUIRE_LIVE_KEYS === "true") return true;
+  if (process.env.CLERK_REQUIRE_LIVE_KEYS === "false") return false;
+  return (
+    Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.VERCEL)
+  );
+}
+
+export function assertCorsOrigin(): { ok: true } | { ok: false; reason: string } {
+  const cors = (process.env.CORS_ORIGIN ?? "*").trim();
+  if (isProductionRuntime() && cors === "*") {
+    return {
+      ok: false,
+      reason:
+        "CORS_ORIGIN=* is not allowed in production. Set CORS_ORIGIN to your exact frontend origin (e.g. https://linden2.vercel.app).",
+    };
+  }
+  return { ok: true };
+}
+
 export function assertServerClerkKeys(): { ok: true } | { ok: false; reason: string } {
   const kind = serverClerkKeyKind();
-  const requireLive = process.env.CLERK_REQUIRE_LIVE_KEYS === "true";
   const looksProd = isProductionRuntime();
+  const requireLive = requireLiveClerkKeys();
 
   if (looksProd && kind === "missing") {
     return {
@@ -53,10 +74,20 @@ export function assertServerClerkKeys(): { ok: true } | { ok: false; reason: str
   if (requireLive && kind !== "live") {
     return {
       ok: false,
-      reason: "CLERK_REQUIRE_LIVE_KEYS=true but CLERK_SECRET_KEY is not sk_live_.",
+      reason:
+        "Live Clerk keys are required on Railway/Vercel (or when CLERK_REQUIRE_LIVE_KEYS=true). Set sk_live_ or CLERK_REQUIRE_LIVE_KEYS=false for staging.",
     };
   }
   return { ok: true };
+}
+
+/** Fail-fast production gates: CORS allowlist + Clerk keys. */
+export function assertProductionConfig():
+  | { ok: true }
+  | { ok: false; reason: string } {
+  const cors = assertCorsOrigin();
+  if (!cors.ok) return cors;
+  return assertServerClerkKeys();
 }
 
 export function clerkPublishableKind(

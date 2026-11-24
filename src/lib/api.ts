@@ -141,6 +141,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  patchEstimateLine: (
+    jobId: string,
+    lineId: string,
+    body: Record<string, unknown>,
+  ) =>
+    request<JobBundle>(`/api/jobs/${jobId}/estimate-lines/${lineId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   deleteEstimateLine: (jobId: string, lineId: string) =>
     request<JobBundle>(`/api/jobs/${jobId}/estimate-lines/${lineId}`, {
       method: "DELETE",
@@ -148,6 +157,11 @@ export const api = {
   addTime: (jobId: string, body: Record<string, unknown>) =>
     request<JobBundle>(`/api/jobs/${jobId}/time-entries`, {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchTime: (jobId: string, entryId: string, body: Record<string, unknown>) =>
+    request<JobBundle>(`/api/jobs/${jobId}/time-entries/${entryId}`, {
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
   deleteTime: (jobId: string, entryId: string) =>
@@ -173,6 +187,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  patchChangeOrder: (
+    jobId: string,
+    coId: string,
+    body: Record<string, unknown>,
+  ) =>
+    request<JobBundle>(`/api/jobs/${jobId}/change-orders/${coId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   deleteChangeOrder: (jobId: string, coId: string) =>
     request<JobBundle>(`/api/jobs/${jobId}/change-orders/${coId}`, {
       method: "DELETE",
@@ -185,6 +208,11 @@ export const api = {
   }) =>
     request<{ id: string }>("/api/workers", {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchWorker: (id: string, body: Record<string, unknown>) =>
+    request<{ ok: true }>(`/api/workers/${id}`, {
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
   deleteWorker: (id: string) =>
