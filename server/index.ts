@@ -492,6 +492,61 @@ app.patch("/api/jobs/:id", async (c) => {
   return c.json(await loadJobBundle(orgId, id));
 });
 
+/**
+ * Cascade-delete a job and its children.
+ * Neon HTTP (`drizzle-orm/neon-http`) throws on interactive `db.transaction()` —
+ * that was the production DELETE /api/jobs/:id 500. Use batch (Neon HTTP txn) or
+ * ordered awaits on Postgres; sync transaction on SQLite.
+ */
+export async function deleteJobCascade(orgId: string, jobId: string) {
+  const removeRows = (tx: typeof db) => [
+    tx
+      .delete(s.estimateLines)
+      .where(
+        and(
+          eq(s.estimateLines.organizationId, orgId),
+          eq(s.estimateLines.jobId, jobId),
+        ),
+      ),
+    tx
+      .delete(s.timeEntries)
+      .where(
+        and(eq(s.timeEntries.organizationId, orgId), eq(s.timeEntries.jobId, jobId)),
+      ),
+    tx
+      .delete(s.costEntries)
+      .where(
+        and(eq(s.costEntries.organizationId, orgId), eq(s.costEntries.jobId, jobId)),
+      ),
+    tx
+      .delete(s.changeOrders)
+      .where(
+        and(
+          eq(s.changeOrders.organizationId, orgId),
+          eq(s.changeOrders.jobId, jobId),
+        ),
+      ),
+    tx
+      .delete(s.jobs)
+      .where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, jobId))),
+  ];
+
+  if (isPostgres) {
+    const stmts = removeRows(db);
+    // neon-http: db.batch → client.transaction([...]); db.transaction() always throws.
+    if (typeof db.batch === "function") {
+      await db.batch(stmts);
+    } else {
+      for (const statement of stmts) await statement;
+    }
+  } else {
+    // better-sqlite3 rejects an async transaction callback.
+    db.transaction((tx: typeof db) => {
+      for (const statement of removeRows(tx)) statement.run();
+    });
+  }
+}
+
 app.delete("/api/jobs/:id", async (c) => {
   const orgId = getOrg(c);
   const id = c.req.param("id");
@@ -502,37 +557,7 @@ app.delete("/api/jobs/:id", async (c) => {
     .limit(1);
   if (!existing[0]) throw new HTTPException(404, { message: "Job not found" });
 
-  const removeRows = (tx: typeof db) => [
-    tx
-      .delete(s.estimateLines)
-      .where(
-        and(eq(s.estimateLines.organizationId, orgId), eq(s.estimateLines.jobId, id)),
-      ),
-    tx
-      .delete(s.timeEntries)
-      .where(and(eq(s.timeEntries.organizationId, orgId), eq(s.timeEntries.jobId, id))),
-    tx
-      .delete(s.costEntries)
-      .where(and(eq(s.costEntries.organizationId, orgId), eq(s.costEntries.jobId, id))),
-    tx
-      .delete(s.changeOrders)
-      .where(
-        and(eq(s.changeOrders.organizationId, orgId), eq(s.changeOrders.jobId, id)),
-      ),
-    tx.delete(s.jobs).where(and(eq(s.jobs.organizationId, orgId), eq(s.jobs.id, id))),
-  ];
-
-  if (isPostgres) {
-    await db.transaction(async (tx: typeof db) => {
-      for (const statement of removeRows(tx)) await statement;
-    });
-  } else {
-    // better-sqlite3 rejects an async transaction callback.
-    db.transaction((tx: typeof db) => {
-      for (const statement of removeRows(tx)) statement.run();
-    });
-  }
-
+  await deleteJobCascade(orgId, id);
   return c.json({ ok: true });
 });
 
