@@ -27,6 +27,11 @@ import {
   type Worker,
 } from "./lib/api.ts";
 import { AccountMenu } from "./components/AccountMenu.tsx";
+import {
+  guideWasSeen,
+  HowItWorks,
+  markGuideSeen,
+} from "./components/HowItWorks.tsx";
 import { Logo } from "./components/Logo.tsx";
 import {
   Button,
@@ -75,64 +80,87 @@ function AppLayout() {
   const onJob = pathname.startsWith("/jobs/");
   const [header, setHeader] = useState<PageHeader>({});
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  useEffect(() => {
+    if (!guideWasSeen()) setGuideOpen(true);
+  }, []);
+
+  function closeGuide() {
+    markGuideSeen();
+    setGuideOpen(false);
+  }
 
   return (
     <PageHeaderContext.Provider value={setHeader}>
       <PageActionsContext.Provider value={actionsEl}>
-        <div className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-8">
-          <header className="relative z-30 mb-6 border-b border-[var(--line)] pb-4 sm:mb-8 sm:pb-5">
-            <div className="flex items-start justify-between gap-3">
-              <Link to="/" className="flex min-w-0 flex-1 items-start gap-3">
-                <Logo className="mt-1 h-10 w-10 shrink-0 sm:h-11 sm:w-11" />
-                <span className="min-w-0">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-[var(--accent)] sm:text-xs">
-                    Linden
-                  </p>
-                  <h1 className="font-display jm-break mt-1 text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl md:text-4xl">
-                    {header.title ?? "Estimate vs actual"}
-                  </h1>
+        <header className="jm-appbar">
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-3 sm:px-4">
+            <Link to="/" className="flex min-w-0 items-center gap-2.5">
+              <Logo className="h-8 w-8 shrink-0" />
+              <span className="font-display truncate text-lg font-bold tracking-tight text-[var(--ink)]">
+                Linden
+              </span>
+            </Link>
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <button
+                type="button"
+                className="jm-help"
+                aria-haspopup="dialog"
+                onClick={() => setGuideOpen(true)}
+              >
+                <span className="jm-help-mark" aria-hidden>
+                  ?
                 </span>
-              </Link>
+                How it works
+              </button>
               {hasClerk ? <AccountMenu /> : null}
             </div>
-            <p className="jm-break mt-1 text-sm text-[var(--muted)]">
+          </div>
+        </header>
+        <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
+          <div className="mb-5">
+            <h1 className="font-display jm-break text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl">
+              {header.title ?? "Estimate vs actual"}
+            </h1>
+            <p className="jm-break mt-1 max-w-2xl text-sm text-[var(--muted)]">
               {header.eyebrow ??
                 "Track budget, labor, and change orders in one place."}
             </p>
-            <div className="jm-toolbar mt-4">
-              <nav className="flex min-w-0 flex-1 gap-1 rounded-xl bg-[#e8eef4] p-1 sm:flex-none">
-                <NavLink
-                  to="/"
-                  end
-                  className={({ isActive }) =>
-                    `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
-                      isActive
-                        ? "bg-white text-[var(--ink)] shadow-sm"
-                        : "text-[var(--muted)] hover:text-[var(--ink)]"
-                    }`
-                  }
-                >
-                  Jobs
-                </NavLink>
-                <NavLink
-                  to="/workers"
-                  className={({ isActive }) =>
-                    `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
-                      isActive
-                        ? "bg-white text-[var(--ink)] shadow-sm"
-                        : "text-[var(--muted)] hover:text-[var(--ink)]"
-                    }`
-                  }
-                >
-                  Workers
-                </NavLink>
-              </nav>
-              <div
-                ref={setActionsEl}
-                className="jm-shell-actions flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto"
-              />
-            </div>
-          </header>
+          </div>
+          <div className="jm-toolbar mb-6">
+            <nav className="flex min-w-0 flex-1 gap-1 rounded-xl bg-[#e8eef4] p-1 sm:flex-none">
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
+                    isActive
+                      ? "bg-white text-[var(--ink)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  }`
+                }
+              >
+                Jobs
+              </NavLink>
+              <NavLink
+                to="/workers"
+                className={({ isActive }) =>
+                  `flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition sm:flex-none ${
+                    isActive
+                      ? "bg-white text-[var(--ink)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  }`
+                }
+              >
+                Workers
+              </NavLink>
+            </nav>
+            <div
+              ref={setActionsEl}
+              className="jm-shell-actions flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto"
+            />
+          </div>
           {/* Keep both lists mounted so tab changes do not refetch or replay them. */}
           <div hidden={onWorkers || onJob}>
             <JobsPage />
@@ -141,6 +169,7 @@ function AppLayout() {
             <WorkersPage />
           </div>
           {onJob ? <Outlet /> : null}
+          <HowItWorks open={guideOpen} onClose={closeGuide} />
         </div>
       </PageActionsContext.Provider>
     </PageHeaderContext.Provider>

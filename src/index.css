@@ -252,6 +252,47 @@ textarea:invalid {
   word-break: break-word;
 }
 
+.jm-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--line);
+  background: rgba(247, 249, 251, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.jm-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.7rem 0.3rem 0.35rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jm-help:hover {
+  background: var(--accent-soft);
+}
+
+.jm-help-mark {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .jm-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -261,6 +302,38 @@ textarea:invalid {
 
 .jm-shell-actions:empty {
   display: none;
+}
+
+.jm-guide {
+  position: fixed;
+  top: 0.75rem;
+  width: min(36rem, calc(100vw - 1.5rem));
+  max-height: calc(100dvh - 1.5rem);
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  color: var(--ink);
+  box-shadow: 0 24px 60px -24px rgba(16, 24, 32, 0.55);
+}
+
+.jm-guide::backdrop {
+  background: rgba(16, 24, 32, 0.46);
+}
+
+.jm-guide-body {
+  max-height: calc(100dvh - 1.5rem);
+  overflow: auto;
+  padding: 1.25rem 1.25rem 1.1rem;
+  outline: none;
+}
+
+@media (min-width: 640px) {
+  .jm-guide-body {
+    padding: 1.5rem 1.5rem 1.25rem;
+  }
 }
 
 .jm-status-grid {
