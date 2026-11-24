@@ -1,6 +1,6 @@
 import { getRequestListener } from "@hono/node-server";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { assertServerClerkKeys } from "../server/security.ts";
+import { assertProductionConfig } from "../server/security.ts";
 import type { app as serverApp, migratePostgres as migrateDb } from "../server/vercel-bundle.mjs";
 
 type BundleModule = {
@@ -48,13 +48,13 @@ export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
 ) {
-  const gate = assertServerClerkKeys();
+  const gate = assertProductionConfig();
   if (!gate.ok) {
     console.error(`Linden API refused request: ${gate.reason}`);
     if (res.headersSent) return;
     res.statusCode = 503;
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ error: "Auth is not configured" }));
+    res.end(JSON.stringify({ error: gate.reason }));
     return;
   }
 

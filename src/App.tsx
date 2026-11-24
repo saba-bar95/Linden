@@ -24,6 +24,7 @@ import {
   money,
   type Job,
   type JobBundle,
+  type JobMargin,
   type Worker,
 } from "./lib/api.ts";
 import { AccountMenu } from "./components/AccountMenu.tsx";
@@ -49,6 +50,9 @@ import { validateForm } from "./lib/form.ts";
 
 const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
+const JOB_STATUSES = ["draft", "active", "completed", "cancelled"] as const;
+const CATEGORIES = ["labor", "materials", "subcontract", "other"] as const;
+
 type PageHeader = { title?: string; eyebrow?: string };
 
 const PageHeaderContext = createContext<(next: PageHeader) => void>(() => {});
@@ -72,6 +76,10 @@ function PageActions({
   const target = useContext(PageActionsContext);
   if (!target || !active) return null;
   return createPortal(children, target);
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong";
 }
 
 function AppLayout() {
@@ -184,6 +192,8 @@ function JobsPage() {
   const [busy, setBusy] = useState(false);
   const [confirmJobId, setConfirmJobId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const jobsActive = useLocation().pathname === "/";
   usePageHeader(undefined, undefined, jobsActive);
 
@@ -197,6 +207,16 @@ function JobsPage() {
     void refresh().catch((e: Error) => setError(e.message));
   }, [jobsActive]);
 
+  const q = search.trim().toLowerCase();
+  const filteredJobs = jobs.filter((job) => {
+    if (statusFilter !== "all" && job.status !== statusFilter) return false;
+    if (!q) return true;
+    return (
+      job.title.toLowerCase().includes(q) ||
+      job.clientName.toLowerCase().includes(q)
+    );
+  });
+
   async function createJob(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -207,7 +227,7 @@ function JobsPage() {
       setClientName("");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create job");
+      setError(errMessage(err));
     } finally {
       setBusy(false);
     }
@@ -269,100 +289,223 @@ function JobsPage() {
           body="Create a job to build an estimate, log time, and watch margin move as costs land."
         />
       ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => (
-            <div key={job.id} className="jm-row jm-surface p-3 sm:p-4">
-              <Link to={`/jobs/${job.id}`} className="block">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <p className="font-display jm-break text-base font-semibold text-[var(--ink)] sm:text-lg">
-                        {job.title}
-                      </p>
-                      <StatusBadge status={job.status} />
+        <>
+          <div className="jm-filter-bar">
+            <Field
+              name="jobSearch"
+              data-label="Search jobs"
+              placeholder="Search title or client"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select
+              name="statusFilter"
+              data-label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              {JOB_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {filteredJobs.length === 0 ? (
+            <EmptyState
+              title="No matching jobs"
+              body="Try a different status or search term."
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredJobs.map((job) => (
+                <div key={job.id} className="jm-row jm-surface p-3 sm:p-4">
+                  <Link to={`/jobs/${job.id}`} className="block">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <p className="font-display jm-break text-base font-semibold text-[var(--ink)] sm:text-lg">
+                            {job.title}
+                          </p>
+                          <StatusBadge status={job.status} />
+                        </div>
+                        <p className="jm-break text-sm text-[var(--muted)]">
+                          {job.clientName || "No client"}
+                        </p>
+                      </div>
+                      {job.margin && (
+                        <div className="shrink-0 text-left text-sm sm:min-w-40 sm:text-right">
+                          <p
+                            className={`font-display text-xl font-bold ${
+                              job.margin.overBudget
+                                ? "text-[var(--bad)]"
+                                : "text-[var(--ok)]"
+                            }`}
+                          >
+                            {money(job.margin.margin)}
+                            {job.margin.marginPct != null
+                              ? ` · ${job.margin.marginPct}%`
+                              : ""}
+                          </p>
+                          <p className="text-[var(--muted)]">
+                            Forecast {money(job.margin.forecastCost)} / budget{" "}
+                            {money(job.margin.budgetCost)}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <p className="jm-break text-sm text-[var(--muted)]">
-                      {job.clientName || "No client"}
-                    </p>
-                  </div>
-                  {job.margin && (
-                    <div className="shrink-0 text-left text-sm sm:min-w-40 sm:text-right">
-                      <p
-                        className={`font-display text-xl font-bold ${
-                          job.margin.overBudget
-                            ? "text-[var(--bad)]"
-                            : "text-[var(--ok)]"
-                        }`}
+                    {job.margin && (
+                      <div className="mt-3">
+                        <MarginMeter
+                          budgetCost={job.margin.budgetCost}
+                          forecastCost={job.margin.forecastCost}
+                          overBudget={job.margin.overBudget}
+                        />
+                      </div>
+                    )}
+                  </Link>
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                    {confirmJobId === job.id ? (
+                      <>
+                        <p className="mr-auto text-sm text-[var(--muted)]">
+                          Deletes the estimate, time, costs, and change orders.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={deletingId === job.id}
+                          onClick={() => setConfirmJobId(null)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          disabled={deletingId === job.id}
+                          onClick={() => {
+                            setDeletingId(job.id);
+                            setError(null);
+                            void api
+                              .deleteJob(job.id)
+                              .then(() => refresh())
+                              .then(() => setConfirmJobId(null))
+                              .catch((e: Error) => setError(e.message))
+                              .finally(() => setDeletingId(null));
+                          }}
+                        >
+                          {deletingId === job.id ? "Deleting…" : "Delete job"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => setConfirmJobId(job.id)}
                       >
-                        {money(job.margin.margin)}
-                        {job.margin.marginPct != null
-                          ? ` · ${job.margin.marginPct}%`
-                          : ""}
-                      </p>
-                      <p className="text-[var(--muted)]">
-                        Forecast {money(job.margin.forecastCost)} / budget{" "}
-                        {money(job.margin.budgetCost)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {job.margin && (
-                  <div className="mt-3">
-                    <MarginMeter
-                      budgetCost={job.margin.budgetCost}
-                      forecastCost={job.margin.forecastCost}
-                      overBudget={job.margin.overBudget}
-                    />
+                        Delete
+                      </Button>
+                    )}
                   </div>
-                )}
-              </Link>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                {confirmJobId === job.id ? (
-                  <>
-                    <p className="mr-auto text-sm text-[var(--muted)]">
-                      Deletes the estimate, time, costs, and change orders.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={deletingId === job.id}
-                      onClick={() => setConfirmJobId(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      disabled={deletingId === job.id}
-                      onClick={() => {
-                        setDeletingId(job.id);
-                        setError(null);
-                        void api
-                          .deleteJob(job.id)
-                          .then(() => refresh())
-                          .then(() => setConfirmJobId(null))
-                          .catch((e: Error) => setError(e.message))
-                          .finally(() => setDeletingId(null));
-                      }}
-                    >
-                      {deletingId === job.id ? "Deleting…" : "Delete job"}
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() => setConfirmJobId(job.id)}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </>
+  );
+}
+
+function StickyMarginSummary({ margin }: { margin: JobMargin }) {
+  return (
+    <div className="jm-sticky-margin" aria-live="polite">
+      <div className="jm-sticky-margin-grid">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Live margin
+          </p>
+          <p
+            className={`font-display text-xl font-bold sm:text-2xl ${
+              margin.overBudget ? "text-[var(--bad)]" : "text-[var(--ok)]"
+            }`}
+          >
+            {money(margin.margin)}
+            {margin.marginPct != null ? (
+              <span className="ml-2 text-sm font-semibold opacity-80">
+                {margin.marginPct}%
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            Forecast {money(margin.forecastCost)} · budget cost{" "}
+            {money(margin.budgetCost)}
+            {margin.overBudget ? " · over budget" : ""}
+          </p>
+        </div>
+        <MarginMeter
+          budgetCost={margin.budgetCost}
+          forecastCost={margin.forecastCost}
+          overBudget={margin.overBudget}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CategoryBreakdown({ margin }: { margin: JobMargin }) {
+  const rows = CATEGORIES.map((category) => ({
+    category,
+    ...(margin.byCategory?.[category] ?? {
+      budgetCost: 0,
+      budgetPrice: 0,
+      actual: 0,
+      committed: 0,
+    }),
+  })).filter(
+    (row) =>
+      row.budgetCost !== 0 ||
+      row.budgetPrice !== 0 ||
+      row.actual !== 0 ||
+      row.committed !== 0,
+  );
+
+  if (rows.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-[var(--muted)]">
+        Category totals appear once estimate lines or costs are added.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        By category
+      </p>
+      <table className="jm-category-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Budget cost</th>
+            <th>Budget price</th>
+            <th>Actual</th>
+            <th>Committed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.category}>
+              <td className="capitalize">{row.category}</td>
+              <td>{money(row.budgetCost)}</td>
+              <td>{money(row.budgetPrice)}</td>
+              <td>{money(row.actual)}</td>
+              <td>{money(row.committed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -378,6 +521,10 @@ function JobDetailPage() {
   const [metaTitle, setMetaTitle] = useState("");
   const [metaClient, setMetaClient] = useState("");
   const [metaNotes, setMetaNotes] = useState("");
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [editingCostId, setEditingCostId] = useState<string | null>(null);
+  const [editingCoId, setEditingCoId] = useState<string | null>(null);
   const onThisJob = useLocation().pathname.startsWith("/jobs/");
   usePageHeader(
     bundle?.job.title,
@@ -397,6 +544,18 @@ function JobDetailPage() {
     setMetaNotes(job.job.notes ?? "");
   }
 
+  function applyBundle(next: JobBundle) {
+    setBundle(next);
+    setError(null);
+  }
+
+  function runMutation(work: Promise<JobBundle>) {
+    setError(null);
+    return work
+      .then(applyBundle)
+      .catch((e: unknown) => setError(errMessage(e)));
+  }
+
   useEffect(() => {
     void refresh().catch((e: Error) => setError(e.message));
   }, [id]);
@@ -410,78 +569,82 @@ function JobDetailPage() {
   const { job, lines, timeEntries, costEntries, changeOrders, margin } = bundle;
 
   async function saveMeta() {
-    setBundle(
-      await api.patchJob(job.id, {
-        title: metaTitle,
-        clientName: metaClient,
-        notes: metaNotes,
-      }),
-    );
-    setEditingMeta(false);
+    try {
+      applyBundle(
+        await api.patchJob(job.id, {
+          title: metaTitle,
+          clientName: metaClient,
+          notes: metaNotes,
+        }),
+      );
+      setEditingMeta(false);
+    } catch (e) {
+      setError(errMessage(e));
+    }
   }
 
   return (
     <>
       <PageActions>
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-10 flex-1 sm:flex-none"
-            onClick={() =>
-              void refresh().catch((e: Error) => setError(e.message))
-            }
-          >
-            Refresh
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-10 flex-1 sm:flex-none"
-            onClick={() => setEditingMeta((v) => !v)}
-          >
-            {editingMeta ? "Cancel edit" : "Edit details"}
-          </Button>
-          {confirmDelete ? (
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                className="min-h-10 flex-1 sm:flex-none"
-                disabled={deleting}
-                onClick={() => setConfirmDelete(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                className="min-h-10 flex-1 sm:flex-none"
-                disabled={deleting}
-                onClick={() => {
-                  setDeleting(true);
-                  setError(null);
-                  void api
-                    .deleteJob(job.id)
-                    .then(() => navigate("/"))
-                    .catch((e: Error) => {
-                      setError(e.message);
-                      setDeleting(false);
-                    });
-                }}
-              >
-                {deleting ? "Deleting…" : "Confirm delete"}
-              </Button>
-            </>
-          ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          className="min-h-10 flex-1 sm:flex-none"
+          onClick={() =>
+            void refresh().catch((e: Error) => setError(e.message))
+          }
+        >
+          Refresh
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="min-h-10 flex-1 sm:flex-none"
+          onClick={() => setEditingMeta((v) => !v)}
+        >
+          {editingMeta ? "Cancel edit" : "Edit details"}
+        </Button>
+        {confirmDelete ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-10 flex-1 sm:flex-none"
+              disabled={deleting}
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancel
+            </Button>
             <Button
               type="button"
               variant="danger"
               className="min-h-10 flex-1 sm:flex-none"
-              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              onClick={() => {
+                setDeleting(true);
+                setError(null);
+                void api
+                  .deleteJob(job.id)
+                  .then(() => navigate("/"))
+                  .catch((e: Error) => {
+                    setError(e.message);
+                    setDeleting(false);
+                  });
+              }}
             >
-              Delete job
+              {deleting ? "Deleting…" : "Confirm delete"}
             </Button>
-          )}
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="danger"
+            className="min-h-10 flex-1 sm:flex-none"
+            onClick={() => setConfirmDelete(true)}
+          >
+            Delete job
+          </Button>
+        )}
       </PageActions>
       {error && <ErrorBanner message={error} />}
 
@@ -494,32 +657,30 @@ function JobDetailPage() {
         </Link>
         {confirmDelete && (
           <p className="mt-2 text-sm text-[var(--bad)]">
-            This removes the job and its estimate, time, costs, and change orders.
+            This removes the job and its estimate, time, costs, and change
+            orders.
           </p>
         )}
       </div>
 
+      <StickyMarginSummary margin={margin} />
+
       <div className="mb-6 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Job status">
           <div className="jm-status-grid mb-4">
-            {(["draft", "active", "completed", "cancelled"] as const).map(
-              (status) => (
-                <Button
-                  key={status}
-                  type="button"
-                  variant={job.status === status ? "primary" : "secondary"}
-                  className="!capitalize !px-3 !py-2"
-                  onClick={() =>
-                    void api
-                      .patchJob(job.id, { status })
-                      .then(setBundle)
-                      .catch((e: Error) => setError(e.message))
-                  }
-                >
-                  {status}
-                </Button>
-              ),
-            )}
+            {JOB_STATUSES.map((status) => (
+              <Button
+                key={status}
+                type="button"
+                variant={job.status === status ? "primary" : "secondary"}
+                className="!capitalize !px-3 !py-2"
+                onClick={() =>
+                  void runMutation(api.patchJob(job.id, { status }))
+                }
+              >
+                {status}
+              </Button>
+            ))}
           </div>
           {editingMeta ? (
             <div className="space-y-3">
@@ -572,6 +733,10 @@ function JobDetailPage() {
             Forecast cost {money(margin.forecastCost)}
             {margin.overBudget ? " · over budget" : ""}
           </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Margin = budget price − forecast cost. Over-budget compares
+            forecast to budget <em>cost</em>.
+          </p>
           <div className="mt-4">
             <MarginMeter
               budgetCost={margin.budgetCost}
@@ -597,6 +762,7 @@ function JobDetailPage() {
               <p className="font-semibold">{money(margin.unbilled)}</p>
             </div>
           </div>
+          <CategoryBreakdown margin={margin} />
         </Panel>
       </div>
 
@@ -615,23 +781,114 @@ function JobDetailPage() {
                 key={line.id}
                 className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span className="jm-break min-w-0">
-                  <span className="font-semibold capitalize text-[var(--accent-ink)]">
-                    {line.category}
-                  </span>{" "}
-                  · {line.description} · {line.quantity} × {money(line.unitCost)}{" "}
-                  / {money(line.unitPrice)}
-                </span>
-                <Button
-                  type="button"
-                  variant="danger"
-                  className="self-start sm:self-auto"
-                  onClick={() =>
-                    void api.deleteEstimateLine(job.id, line.id).then(setBundle)
-                  }
-                >
-                  Remove
-                </Button>
+                {editingLineId === line.id ? (
+                  <form
+                    noValidate
+                    className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-6"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!validateForm(e.currentTarget)) return;
+                      const fd = new FormData(e.currentTarget);
+                      void runMutation(
+                        api.patchEstimateLine(job.id, line.id, {
+                          category: fd.get("category"),
+                          description: fd.get("description"),
+                          quantity: Number(fd.get("quantity")),
+                          unitCost: Number(fd.get("unitCost")),
+                          unitPrice: Number(fd.get("unitPrice")),
+                        }),
+                      ).then(() => setEditingLineId(null));
+                    }}
+                  >
+                    <Select
+                      name="category"
+                      data-label="Category"
+                      defaultValue={line.category}
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
+                    <Field
+                      name="description"
+                      data-label="Description"
+                      required
+                      defaultValue={line.description}
+                      className="sm:col-span-2"
+                    />
+                    <Field
+                      name="quantity"
+                      data-label="Quantity"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      defaultValue={line.quantity}
+                    />
+                    <Field
+                      name="unitCost"
+                      data-label="Unit cost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      defaultValue={line.unitCost}
+                    />
+                    <Field
+                      name="unitPrice"
+                      data-label="Unit price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      defaultValue={line.unitPrice}
+                    />
+                    <div className="flex flex-wrap gap-1 sm:col-span-2 md:col-span-6">
+                      <Button type="submit" variant="secondary">
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setEditingLineId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <span className="jm-break min-w-0">
+                      <span className="font-semibold capitalize text-[var(--accent-ink)]">
+                        {line.category}
+                      </span>{" "}
+                      · {line.description} · {line.quantity} ×{" "}
+                      {money(line.unitCost)} / {money(line.unitPrice)}
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEditingLineId(line.id)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() =>
+                          void runMutation(
+                            api.deleteEstimateLine(job.id, line.id),
+                          )
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
             {lines.length === 0 && (
@@ -641,9 +898,10 @@ function JobDetailPage() {
             )}
           </ul>
           <EstimateForm
-            onSubmit={async (body) =>
-              setBundle(await api.addEstimateLine(job.id, body))
-            }
+            onSubmit={async (body) => {
+              applyBundle(await api.addEstimateLine(job.id, body));
+            }}
+            onError={setError}
           />
         </Panel>
 
@@ -654,27 +912,103 @@ function JobDetailPage() {
                 key={t.id}
                 className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span className="jm-break min-w-0">
-                  {t.workDate} · {t.hours}h × {money(t.costRate)} ={" "}
-                  <strong>{money(t.hours * t.costRate)}</strong>
-                  {t.note ? ` · ${t.note}` : ""}
-                </span>
-                <Button
-                  type="button"
-                  variant="danger"
-                  className="self-start sm:self-auto"
-                  onClick={() =>
-                    void api.deleteTime(job.id, t.id).then(setBundle)
-                  }
-                >
-                  Remove
-                </Button>
+                {editingTimeId === t.id ? (
+                  <form
+                    noValidate
+                    className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!validateForm(e.currentTarget)) return;
+                      const fd = new FormData(e.currentTarget);
+                      void runMutation(
+                        api.patchTime(job.id, t.id, {
+                          hours: Number(fd.get("hours")),
+                          workDate: fd.get("workDate") || undefined,
+                          note: fd.get("note") || "",
+                          costRate: Number(fd.get("costRate")),
+                        }),
+                      ).then(() => setEditingTimeId(null));
+                    }}
+                  >
+                    <Field
+                      name="hours"
+                      data-label="Hours"
+                      type="number"
+                      step="0.25"
+                      min="0.25"
+                      required
+                      defaultValue={t.hours}
+                    />
+                    <Field
+                      name="workDate"
+                      data-label="Work date"
+                      type="date"
+                      defaultValue={t.workDate}
+                    />
+                    <Field
+                      name="costRate"
+                      data-label="Cost rate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      defaultValue={t.costRate}
+                    />
+                    <Field
+                      name="note"
+                      data-label="Note"
+                      defaultValue={t.note}
+                      placeholder="Note"
+                    />
+                    <div className="flex flex-wrap gap-1 sm:col-span-2 md:col-span-4">
+                      <Button type="submit" variant="secondary">
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setEditingTimeId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <span className="jm-break min-w-0">
+                      {t.workDate} · {t.hours}h × {money(t.costRate)} ={" "}
+                      <strong>{money(t.hours * t.costRate)}</strong>
+                      {t.note ? ` · ${t.note}` : ""}
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEditingTimeId(t.id)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() =>
+                          void runMutation(api.deleteTime(job.id, t.id))
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
           <TimeForm
             workers={workers}
-            onSubmit={async (body) => setBundle(await api.addTime(job.id, body))}
+            onSubmit={async (body) => {
+              applyBundle(await api.addTime(job.id, body));
+            }}
+            onError={setError}
           />
         </Panel>
 
@@ -685,41 +1019,111 @@ function JobDetailPage() {
                 key={e.id}
                 className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span className="jm-break min-w-0">
-                  {e.entryDate} ·{" "}
-                  <span className="capitalize">{e.category}</span> ·{" "}
-                  {e.description} · <strong>{money(e.amount)}</strong> ·{" "}
-                  <em>{e.status}</em>
-                </span>
-                <span className="flex flex-wrap gap-1">
-                  {e.status === "committed" && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() =>
-                        void api
-                          .patchCost(job.id, e.id, { status: "actual" })
-                          .then(setBundle)
-                      }
-                    >
-                      Mark actual
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() =>
-                      void api.deleteCost(job.id, e.id).then(setBundle)
-                    }
+                {editingCostId === e.id ? (
+                  <form
+                    noValidate
+                    className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-4"
+                    onSubmit={(ev) => {
+                      ev.preventDefault();
+                      if (!validateForm(ev.currentTarget)) return;
+                      const fd = new FormData(ev.currentTarget);
+                      void runMutation(
+                        api.patchCost(job.id, e.id, {
+                          description: fd.get("description"),
+                          amount: Number(fd.get("amount")),
+                          status: fd.get("status"),
+                        }),
+                      ).then(() => setEditingCostId(null));
+                    }}
                   >
-                    Remove
-                  </Button>
-                </span>
+                    <Field
+                      name="description"
+                      data-label="Description"
+                      required
+                      defaultValue={e.description}
+                      className="sm:col-span-2"
+                    />
+                    <Field
+                      name="amount"
+                      data-label="Amount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      defaultValue={e.amount}
+                    />
+                    <Select
+                      name="status"
+                      data-label="Status"
+                      defaultValue={e.status}
+                    >
+                      <option value="committed">committed</option>
+                      <option value="actual">actual</option>
+                    </Select>
+                    <div className="flex flex-wrap gap-1 sm:col-span-2 md:col-span-4">
+                      <Button type="submit" variant="secondary">
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setEditingCostId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <span className="jm-break min-w-0">
+                      {e.entryDate} ·{" "}
+                      <span className="capitalize">{e.category}</span> ·{" "}
+                      {e.description} · <strong>{money(e.amount)}</strong> ·{" "}
+                      <em>{e.status}</em>
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEditingCostId(e.id)}
+                      >
+                        Edit
+                      </Button>
+                      {e.status === "committed" && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() =>
+                            void runMutation(
+                              api.patchCost(job.id, e.id, {
+                                status: "actual",
+                              }),
+                            )
+                          }
+                        >
+                          Mark actual
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() =>
+                          void runMutation(api.deleteCost(job.id, e.id))
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
           <CostForm
-            onSubmit={async (body) => setBundle(await api.addCost(job.id, body))}
+            onSubmit={async (body) => {
+              applyBundle(await api.addCost(job.id, body));
+            }}
+            onError={setError}
           />
         </Panel>
 
@@ -730,27 +1134,95 @@ function JobDetailPage() {
                 key={co.id}
                 className="jm-line-row border-b border-[var(--line)] pb-2 text-sm"
               >
-                <span className="jm-break min-w-0">
-                  {co.description} · cost {money(co.costDelta)} · price{" "}
-                  {money(co.priceDelta)}
-                </span>
-                <Button
-                  type="button"
-                  variant="danger"
-                  className="self-start sm:self-auto"
-                  onClick={() =>
-                    void api.deleteChangeOrder(job.id, co.id).then(setBundle)
-                  }
-                >
-                  Remove
-                </Button>
+                {editingCoId === co.id ? (
+                  <form
+                    noValidate
+                    className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!validateForm(e.currentTarget)) return;
+                      const fd = new FormData(e.currentTarget);
+                      void runMutation(
+                        api.patchChangeOrder(job.id, co.id, {
+                          description: fd.get("description"),
+                          costDelta: Number(fd.get("costDelta")),
+                          priceDelta: Number(fd.get("priceDelta")),
+                        }),
+                      ).then(() => setEditingCoId(null));
+                    }}
+                  >
+                    <Field
+                      name="description"
+                      data-label="Description"
+                      required
+                      defaultValue={co.description}
+                      className="sm:col-span-2"
+                    />
+                    <Field
+                      name="costDelta"
+                      data-label="Cost change"
+                      type="number"
+                      step="0.01"
+                      required
+                      defaultValue={co.costDelta}
+                    />
+                    <Field
+                      name="priceDelta"
+                      data-label="Price change"
+                      type="number"
+                      step="0.01"
+                      required
+                      defaultValue={co.priceDelta}
+                    />
+                    <div className="flex flex-wrap gap-1 sm:col-span-2 md:col-span-4">
+                      <Button type="submit" variant="secondary">
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setEditingCoId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <span className="jm-break min-w-0">
+                      {co.description} · cost {money(co.costDelta)} · price{" "}
+                      {money(co.priceDelta)}
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEditingCoId(co.id)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() =>
+                          void runMutation(
+                            api.deleteChangeOrder(job.id, co.id),
+                          )
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
           <ChangeOrderForm
-            onSubmit={async (body) =>
-              setBundle(await api.addChangeOrder(job.id, body))
-            }
+            onSubmit={async (body) => {
+              applyBundle(await api.addChangeOrder(job.id, body));
+            }}
+            onError={setError}
           />
         </Panel>
 
@@ -762,11 +1234,11 @@ function JobDetailPage() {
               e.preventDefault();
               if (!validateForm(e.currentTarget)) return;
               const fd = new FormData(e.currentTarget);
-              void api
-                .patchJob(job.id, {
+              void runMutation(
+                api.patchJob(job.id, {
                   invoicedAmount: Number(fd.get("invoiced")),
-                })
-                .then(setBundle);
+                }),
+              );
             }}
           >
             <Field
@@ -795,8 +1267,10 @@ function JobDetailPage() {
 
 function EstimateForm({
   onSubmit,
+  onError,
 }: {
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
+  onError: (message: string) => void;
 }) {
   return (
     <form
@@ -813,7 +1287,9 @@ function EstimateForm({
           quantity: Number(fd.get("quantity")),
           unitCost: Number(fd.get("unitCost")),
           unitPrice: Number(fd.get("unitPrice")),
-        }).then(() => form.reset());
+        })
+          .then(() => form.reset())
+          .catch((err: unknown) => onError(errMessage(err)));
       }}
     >
       <Select name="category" data-label="Category" defaultValue="labor">
@@ -871,9 +1347,11 @@ function EstimateForm({
 function TimeForm({
   workers,
   onSubmit,
+  onError,
 }: {
   workers: Worker[];
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
+  onError: (message: string) => void;
 }) {
   if (workers.length === 0) {
     return (
@@ -899,7 +1377,9 @@ function TimeForm({
           hours: Number(fd.get("hours")),
           workDate: fd.get("workDate") || undefined,
           note: fd.get("note") || undefined,
-        }).then(() => form.reset());
+        })
+          .then(() => form.reset())
+          .catch((err: unknown) => onError(errMessage(err)));
       }}
     >
       <Select
@@ -943,8 +1423,10 @@ function TimeForm({
 
 function CostForm({
   onSubmit,
+  onError,
 }: {
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
+  onError: (message: string) => void;
 }) {
   return (
     <form
@@ -960,7 +1442,9 @@ function CostForm({
           description: fd.get("description"),
           amount: Number(fd.get("amount")),
           status: fd.get("status"),
-        }).then(() => form.reset());
+        })
+          .then(() => form.reset())
+          .catch((err: unknown) => onError(errMessage(err)));
       }}
     >
       <Select name="category" data-label="Category" defaultValue="materials">
@@ -1002,8 +1486,10 @@ function CostForm({
 
 function ChangeOrderForm({
   onSubmit,
+  onError,
 }: {
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
+  onError: (message: string) => void;
 }) {
   return (
     <form
@@ -1018,7 +1504,9 @@ function ChangeOrderForm({
           description: fd.get("description"),
           costDelta: Number(fd.get("costDelta")),
           priceDelta: Number(fd.get("priceDelta")),
-        }).then(() => form.reset());
+        })
+          .then(() => form.reset())
+          .catch((err: unknown) => onError(errMessage(err)));
       }}
     >
       <Field
@@ -1061,6 +1549,7 @@ function WorkersPage() {
   const [busy, setBusy] = useState(false);
   const [confirmWorkerId, setConfirmWorkerId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const workersActive = useLocation().pathname === "/workers";
   usePageHeader(
     "Crew rates",
@@ -1102,6 +1591,7 @@ function WorkersPage() {
             const form = e.currentTarget;
             const fd = new FormData(form);
             setBusy(true);
+            setError(null);
             void api
               .createWorker({
                 name: String(fd.get("name")),
@@ -1159,56 +1649,137 @@ function WorkersPage() {
           {workers.map((w) => (
             <li
               key={w.id}
-              className="jm-surface flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4"
+              className="jm-surface flex flex-col gap-2 px-3 py-3 sm:px-4"
             >
-              <div className="min-w-0">
-                <p className="font-display jm-break text-lg font-semibold">
-                  {w.name}
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  Cost {money(w.costRate)}/h · Bill {money(w.billRate)}/h
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={w.active ? "active" : "cancelled"} />
-                {confirmWorkerId === w.id ? (
-                  <>
+              {editingId === w.id ? (
+                <form
+                  noValidate
+                  className="grid gap-2 sm:grid-cols-2 md:grid-cols-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!validateForm(e.currentTarget)) return;
+                    const fd = new FormData(e.currentTarget);
+                    setError(null);
+                    void api
+                      .patchWorker(w.id, {
+                        name: String(fd.get("name")),
+                        costRate: Number(fd.get("costRate")),
+                        billRate: Number(fd.get("billRate")),
+                      })
+                      .then(() => refresh())
+                      .then(() => setEditingId(null))
+                      .catch((err: Error) => setError(err.message));
+                  }}
+                >
+                  <Field
+                    name="name"
+                    data-label="Name"
+                    required
+                    defaultValue={w.name}
+                  />
+                  <Field
+                    name="costRate"
+                    data-label="Loaded cost / hour"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    defaultValue={w.costRate}
+                  />
+                  <Field
+                    name="billRate"
+                    data-label="Bill rate / hour"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    defaultValue={w.billRate}
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    <Button type="submit" variant="secondary">
+                      Save
+                    </Button>
                     <Button
                       type="button"
-                      variant="secondary"
-                      disabled={deletingId === w.id}
-                      onClick={() => setConfirmWorkerId(null)}
+                      variant="ghost"
+                      onClick={() => setEditingId(null)}
                     >
                       Cancel
                     </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-display jm-break text-lg font-semibold">
+                      {w.name}
+                    </p>
+                    <p className="text-sm text-[var(--muted)]">
+                      Cost {money(w.costRate)}/h · Bill {money(w.billRate)}/h
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={w.active ? "active" : "cancelled"} />
                     <Button
                       type="button"
-                      variant="danger"
-                      disabled={deletingId === w.id}
+                      variant="secondary"
+                      onClick={() => setEditingId(w.id)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
                       onClick={() => {
-                        setDeletingId(w.id);
                         setError(null);
                         void api
-                          .deleteWorker(w.id)
+                          .patchWorker(w.id, { active: !w.active })
                           .then(() => refresh())
-                          .then(() => setConfirmWorkerId(null))
-                          .catch((e: Error) => setError(e.message))
-                          .finally(() => setDeletingId(null));
+                          .catch((e: Error) => setError(e.message));
                       }}
                     >
-                      {deletingId === w.id ? "Deleting…" : "Delete worker"}
+                      {w.active ? "Deactivate" : "Reactivate"}
                     </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() => setConfirmWorkerId(w.id)}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </div>
+                    {confirmWorkerId === w.id ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={deletingId === w.id}
+                          onClick={() => setConfirmWorkerId(null)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          disabled={deletingId === w.id}
+                          onClick={() => {
+                            setDeletingId(w.id);
+                            setError(null);
+                            void api
+                              .deleteWorker(w.id)
+                              .then(() => refresh())
+                              .then(() => setConfirmWorkerId(null))
+                              .catch((e: Error) => setError(e.message))
+                              .finally(() => setDeletingId(null));
+                          }}
+                        >
+                          {deletingId === w.id ? "Deleting…" : "Delete worker"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => setConfirmWorkerId(w.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </li>
           ))}
         </ul>

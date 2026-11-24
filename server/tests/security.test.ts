@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertCorsOrigin,
+  assertProductionConfig,
+  assertServerClerkKeys,
   clerkAuthorizedParties,
   isProductionRuntime,
+  requireLiveClerkKeys,
 } from "../security.ts";
 
 const keys = [
@@ -10,6 +14,8 @@ const keys = [
   "RAILWAY_ENVIRONMENT",
   "CORS_ORIGIN",
   "CLERK_AUTHORIZED_PARTIES",
+  "CLERK_SECRET_KEY",
+  "CLERK_REQUIRE_LIVE_KEYS",
 ] as const;
 const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
@@ -53,5 +59,48 @@ describe("production auth gate", () => {
       "http://localhost:5173",
       "https://linden.vercel.app",
     ]);
+  });
+
+  it("fails production when CORS_ORIGIN is wildcard", () => {
+    delete process.env.RAILWAY_ENVIRONMENT;
+    delete process.env.VERCEL;
+    process.env.NODE_ENV = "production";
+    delete process.env.CORS_ORIGIN;
+    expect(assertCorsOrigin().ok).toBe(false);
+
+    process.env.CORS_ORIGIN = "https://linden2.vercel.app";
+    expect(assertCorsOrigin()).toEqual({ ok: true });
+  });
+
+  it("requires live Clerk keys on Railway/Vercel by default", () => {
+    delete process.env.CLERK_REQUIRE_LIVE_KEYS;
+    delete process.env.RAILWAY_ENVIRONMENT;
+    delete process.env.VERCEL;
+    process.env.NODE_ENV = "test";
+    expect(requireLiveClerkKeys()).toBe(false);
+
+    process.env.VERCEL = "1";
+    process.env.CLERK_SECRET_KEY = "sk_test_abc";
+    expect(requireLiveClerkKeys()).toBe(true);
+    expect(assertServerClerkKeys().ok).toBe(false);
+
+    process.env.CLERK_REQUIRE_LIVE_KEYS = "false";
+    expect(requireLiveClerkKeys()).toBe(false);
+    expect(assertServerClerkKeys()).toEqual({ ok: true });
+
+    process.env.CLERK_REQUIRE_LIVE_KEYS = "true";
+    process.env.CLERK_SECRET_KEY = "sk_live_abc";
+    expect(assertServerClerkKeys()).toEqual({ ok: true });
+  });
+
+  it("combines CORS and Clerk into assertProductionConfig", () => {
+    process.env.NODE_ENV = "production";
+    process.env.VERCEL = "1";
+    process.env.CORS_ORIGIN = "*";
+    process.env.CLERK_SECRET_KEY = "sk_live_abc";
+    expect(assertProductionConfig().ok).toBe(false);
+
+    process.env.CORS_ORIGIN = "https://linden2.vercel.app";
+    expect(assertProductionConfig()).toEqual({ ok: true });
   });
 });
