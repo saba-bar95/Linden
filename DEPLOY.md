@@ -34,7 +34,8 @@ The API also runs `migrate()` on startup and creates tables if missing.
 | Variable | Value |
 | -------- | ----- |
 | `DATABASE_URL` | Neon URL |
-| `CLERK_SECRET_KEY` | `sk_live_…` (required on Railway/Vercel; use `CLERK_REQUIRE_LIVE_KEYS=false` only for staging with `sk_test_`) |
+| `CLERK_SECRET_KEY` | `sk_live_…` for real prod, or `sk_test_…` for staging (still required on Railway/Vercel) |
+| `CLERK_REQUIRE_LIVE_KEYS` | Set `true` on real prod to fail-fast if the secret is not `sk_live_` |
 | `CORS_ORIGIN` | Exact Vercel URL **with `https://`**, e.g. `https://linden.vercel.app` — `*` fails startup in production |
 | `PORT` | Railway sets this |
 

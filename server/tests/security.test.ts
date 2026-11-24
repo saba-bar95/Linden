@@ -72,23 +72,19 @@ describe("production auth gate", () => {
     expect(assertCorsOrigin()).toEqual({ ok: true });
   });
 
-  it("requires live Clerk keys on Railway/Vercel by default", () => {
+  it("requires live Clerk keys only when CLERK_REQUIRE_LIVE_KEYS=true", () => {
     delete process.env.CLERK_REQUIRE_LIVE_KEYS;
-    delete process.env.RAILWAY_ENVIRONMENT;
-    delete process.env.VERCEL;
-    process.env.NODE_ENV = "test";
-    expect(requireLiveClerkKeys()).toBe(false);
-
     process.env.VERCEL = "1";
+    process.env.RAILWAY_ENVIRONMENT = "production";
     process.env.CLERK_SECRET_KEY = "sk_test_abc";
-    expect(requireLiveClerkKeys()).toBe(true);
-    expect(assertServerClerkKeys().ok).toBe(false);
-
-    process.env.CLERK_REQUIRE_LIVE_KEYS = "false";
+    process.env.CORS_ORIGIN = "https://linden2.vercel.app";
     expect(requireLiveClerkKeys()).toBe(false);
     expect(assertServerClerkKeys()).toEqual({ ok: true });
 
     process.env.CLERK_REQUIRE_LIVE_KEYS = "true";
+    expect(requireLiveClerkKeys()).toBe(true);
+    expect(assertServerClerkKeys().ok).toBe(false);
+
     process.env.CLERK_SECRET_KEY = "sk_live_abc";
     expect(assertServerClerkKeys()).toEqual({ ok: true });
   });
@@ -97,7 +93,7 @@ describe("production auth gate", () => {
     process.env.NODE_ENV = "production";
     process.env.VERCEL = "1";
     process.env.CORS_ORIGIN = "*";
-    process.env.CLERK_SECRET_KEY = "sk_live_abc";
+    process.env.CLERK_SECRET_KEY = "sk_test_abc";
     expect(assertProductionConfig().ok).toBe(false);
 
     process.env.CORS_ORIGIN = "https://linden2.vercel.app";

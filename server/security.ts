@@ -39,13 +39,9 @@ export function requireClerkAuth(): boolean {
   return Boolean(process.env.CLERK_SECRET_KEY);
 }
 
-/** True on Railway/Vercel unless CLERK_REQUIRE_LIVE_KEYS=false. */
+/** Live keys only when explicitly opted in — Railway/Vercel alone is not enough. */
 export function requireLiveClerkKeys(): boolean {
-  if (process.env.CLERK_REQUIRE_LIVE_KEYS === "true") return true;
-  if (process.env.CLERK_REQUIRE_LIVE_KEYS === "false") return false;
-  return (
-    Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.VERCEL)
-  );
+  return process.env.CLERK_REQUIRE_LIVE_KEYS === "true";
 }
 
 export function assertCorsOrigin(): { ok: true } | { ok: false; reason: string } {
@@ -75,7 +71,7 @@ export function assertServerClerkKeys(): { ok: true } | { ok: false; reason: str
     return {
       ok: false,
       reason:
-        "Live Clerk keys are required on Railway/Vercel (or when CLERK_REQUIRE_LIVE_KEYS=true). Set sk_live_ or CLERK_REQUIRE_LIVE_KEYS=false for staging.",
+        "CLERK_REQUIRE_LIVE_KEYS=true but CLERK_SECRET_KEY is not sk_live_. Use a live secret key, or unset CLERK_REQUIRE_LIVE_KEYS for staging with sk_test_.",
     };
   }
   return { ok: true };

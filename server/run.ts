@@ -4,6 +4,8 @@ import { migratePostgres } from "./db/index.ts";
 import { app } from "./index.ts";
 import {
   assertProductionConfig,
+  isProductionRuntime,
+  requireLiveClerkKeys,
   serverClerkKeyKind,
 } from "./security.ts";
 
@@ -19,6 +21,15 @@ if (!gate.ok) {
 }
 
 const kind = serverClerkKeyKind();
+if (
+  isProductionRuntime() &&
+  kind === "test" &&
+  !requireLiveClerkKeys()
+) {
+  console.warn(
+    "WARNING: CLERK_SECRET_KEY is sk_test_ on a production host. Set CLERK_REQUIRE_LIVE_KEYS=true with sk_live_ before real users.",
+  );
+}
 
 await migratePostgres();
 console.log(
